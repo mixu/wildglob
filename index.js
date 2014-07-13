@@ -64,10 +64,11 @@ microee.mixin(Glob);
 
 Glob.prototype._filter = function(filepath) {
   var isMatch = wildmatch(filepath, this.pattern);
-  // console.log(filepath, wildmatch(filepath, pattern));
+  console.log('_filter', filepath, this.pattern, wildmatch(filepath, this.pattern));
   if (isMatch) {
     this.found.push(filepath);
   }
+  return isMatch;
 };
 
 Glob.prototype._process = function(pattern) {
@@ -82,7 +83,8 @@ Glob.prototype._process = function(pattern) {
     '?': true,
     '*': true,
     '@': true,
-    '!': true
+    '!': true,
+    '+': true
   };
 
   // everything before the first special character is just a prefix.
@@ -93,7 +95,9 @@ Glob.prototype._process = function(pattern) {
       if (c === '\\') {
         escaping = !escaping;
       } else if (special[pattern.charAt(i)] && !escaping) {
-        prefix = pattern.substr(0, i);
+        // test/a/abc{fed,def}/g/h => test/a (not test/a/abc)
+        var prevSlash = pattern.lastIndexOf('/', i);
+        prefix = pattern.substr(0, prevSlash);
         break;
       }
     }
@@ -102,6 +106,7 @@ Glob.prototype._process = function(pattern) {
   // now i is the index of the first one that is *not* a string.
 
   // see if there's anything else
+  var read;
   switch(i) {
     case pattern.length:
       this._stat(prefix, function(exists, isDir) {
@@ -129,29 +134,26 @@ Glob.prototype._process = function(pattern) {
     case 0:
       // pattern *starts* with some non-trivial item.
       // going to readdir(cwd), but not include the prefix in matches.
-      prefix = '';
-      break;
+      read = ".";
 
     default:
       // pattern has some string bits in the front.
       // whatever it starts with, whether that's "absolute" like /foo/bar,
       // or "relative" like "../baz"
-      break;
+      read = prefix;
   }
 
-  // get the list of entries.
-  var read;
-  if (prefix === '') {
-    read = ".";
-  } else if (isAbsolute(prefix)) {
+  var strip = '';
+   if (isAbsolute(prefix)) {
     if (!prefix) {
-      prefix = "/" + prefix
+      prefix = "/";
     }
-    read = prefix;
-
-    console.log('absolute: ', prefix, this.root, read);
+    // absolute paths are mounted at this.root
+    read = path.join(this.root, prefix);
   } else {
-    read = prefix;
+    // relative paths are resolved against this.cwd
+    read = path.resolve(this.cwd, prefix);
+    strip = this.cwd;
   }
 
   // now read the directory and all subdirectories:
@@ -160,32 +162,92 @@ Glob.prototype._process = function(pattern) {
   // out of pattern, then that's fine, as long as all
   // the parts match.
 
+  function absToRel(str) {
+    return (str.substr(0, strip.length) == strip ? str.substr(strip.length + 1) : str);
+  }
+
   function resolveDir(dirname) {
     // if the input is a directory, add all files in it, but do not add further directories
-    var basepath = (dirname[dirname.length - 1] !== path.sep ? dirname + path.sep : dirname),
-        paths = fs.readdirSync(basepath).map(function(f) {
+    var basepath = (dirname[dirname.length - 1] !== path.sep ? dirname + path.sep : dirname);
+    self._readdir(basepath, function(err, entries) {
+      entries.map(function(f) {
           return basepath + f;
+      }).map(function(filepath) {
+        self._stat(filepath, function(exists, isDir) {
+          // console.log('resolve', filepath, exists, isDir);
+          // this where partial matches against a pending traversal would help by pruning the tree
+          if (isDir) {
+            resolveDir(filepath);
+            // try without a trailing slash
+            if (!self._filter(absToRel(filepath))) {
+              // needed so that wildmatch treats dirs correctly (in some cases)
+              if (filepath.charAt(filepath.length) != '/') {
+                self._filter(absToRel(filepath + '/'));
+              }
+            }
+          } else if (exists) {
+            self._filter(absToRel(filepath));
+          }
         });
-    paths.map(function(filepath) {
-      var stat = fs.statSync(filepath);
-      // this where partial matches against a pending traversal would help by pruning the tree
-      if (stat.isDirectory()) {
-        resolveDir(filepath);
-      } else {
-        self._filter(filepath);
-      }
+      });
     });
   }
 
-
-  var stat = fs.statSync(read);
-  if (stat.isDirectory()) {
-    resolveDir(read);
-  } else {
-    self._filter(read);
-  };
+  this._stat(read, function(exists, isDir) {
+    console.log('Initial', read, exists, isDir);
+    if (isDir) {
+      resolveDir(read);
+      // try without a trailing slash
+      if (!self._filter(absToRel(read))) {
+        // needed so that wildmatch treats dirs correctly (in some cases)
+        if (read.charAt(read.length) != '/') {
+          self._filter(absToRel(read + '/'));
+        }
+      }
+    } else if (exists) {
+      self._filter(absToRel(read));
+    };
+  });
 };
 
+Glob.prototype._stat = function(p, onDone) {
+  var stat;
+  try {
+    stat = fs.statSync(p);
+  } catch (e) {
+    switch(e.code) {
+      case 'ELOOP':
+        break;
+      default:
+        console.error(e);
+        console.error(e.stack);
+    }
+    return onDone(false, false);
+  }
+  return onDone(!!stat, stat.isDirectory());
+};
+
+Glob.prototype._readdir = function(p, onDone) {
+  var entries;
+  try {
+    entries = fs.readdirSync(p);
+  } catch (e) {
+    switch(e.code) {
+      case 'ENOTDIR':
+      case 'ENOENT':
+      case 'ELOOP':
+      case 'ENAMETOOLONG':
+      case 'UNKNOWN':
+        return onDone(e, []);
+      default:
+        this.emit('error', e);
+        console.error(e);
+        console.error(e.stack);
+        return onDone(e, []);
+    }
+  }
+  return onDone(null, entries);
+};
 
 var isAbsolute = process.platform === "win32" ? absWin : absUnix
 

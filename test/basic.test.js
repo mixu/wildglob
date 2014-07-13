@@ -125,7 +125,7 @@ exports['tests'] = {
     }
   },
 
-  'error-callback.js - Ensure that fs errors do not cause duplicate errors': function() {
+  'error-callback.js - Ensure that fs errors do not cause duplicate errors': {
 
     before: function() {
       self.oldReaddir = fs.readdir;
@@ -151,23 +151,7 @@ exports['tests'] = {
     after: function() {
       fs.readdir = self.oldReaddir;
     }
-
-  },
-
-  /*
-  'globstar-match.js - globstar should not have dupe matches': function() {
-    // this test requires the pseudo streaming that is done and
-    // tests that the results are equivalent, even if there is a risk for duplicate entries
-    // due to branching in the globstar matching (at least in the way node-glob does it,
-    // which is described here: https://github.com/isaacs/node-glob/issues/64
-    // might not even be an issue with the less clever approach taken here
   }
-  */
-
-  'mark.js': {
-    // TODO
-  },
-
 };
 
 // if this module is the script being run, then run the tests:
