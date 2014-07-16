@@ -1,11 +1,12 @@
 var fs = require('fs'),
+    path = require('path'),
     assert = require('assert'),
     Fixture = require('file-fixture'),
     glob = require('../index.js');
 
 exports['tests'] = {
 
-  before: function() {
+  before: function(done) {
     var self = this;
     this.fixture = new Fixture();
 
@@ -16,12 +17,34 @@ exports['tests'] = {
       'test/a/b/c/d': 'i like tests',
       'test/a/bc/e/f': 'i like tests',
       'test/a/c/d/c/b': 'i like tests',
-      'test/a/cb/e/f': 'i like tests'
+      'test/a/cb/e/f': 'i like tests',
+      // minimatch just runs in it's own directory, which is a bit annoying, create a real fixture
+      'examples/g.js': 'test',
+      'node_modules/graceful-fs': 'test',
+      'README.md': 'test'
     }, {});
 
     this.absFixtureDir = this.fixture.dirname({});
     [ 'foo', 'bar', 'baz', 'asdf', 'quux', 'qwer', 'rewq'].forEach(function (w) {
       fs.mkdirSync(self.absFixtureDir + '/' + w);
+    });
+
+    var symlinkFrom = path.resolve(this.relativeFixtureDir, './test/a/symlink/a/b/c');
+    var symlinkTo = path.resolve(this.relativeFixtureDir, './test/a/symlink/a/b/c/../..');
+
+    var d = path.dirname(symlinkTo);
+
+    fs.mkdirSync(path.resolve(this.relativeFixtureDir, './test/a/symlink'));
+    fs.mkdirSync(path.resolve(this.relativeFixtureDir, './test/a/symlink/a'));
+    fs.mkdirSync(path.resolve(this.relativeFixtureDir, './test/a/symlink/a/b'));
+
+    console.log(symlinkFrom, symlinkTo);
+
+    fs.symlink('../..', symlinkFrom, "dir", function (err) {
+      if (err) {
+        throw err;
+      }
+      done();
     });
   }
 
@@ -29,24 +52,42 @@ exports['tests'] = {
 
 // create test cases
 
-var bashResults = require('./bash-results.json'),
+var bashResults = require('./bash-results'),
     globs = Object.keys(bashResults);
 
 globs.forEach(function (pattern) {
   var expect = bashResults[pattern];
   var hasSymLink = expect.some(function (m) {
+    return false;
     return /\/symlink\//.test(m);
   });
 
-  if (hasSymLink || pattern == 'test/a/*/+(c|g)/./d' || pattern == 'test/a/abc{fed/g,def}/**///**/' ) {
+  if (hasSymLink ) {
     return;
   }
 
-
   exports['tests'][pattern + ' sync'] = function() {
-    var self = this,
-        result = cleanResults(glob(pattern, { cwd: self.relativeFixtureDir }));
-    console.log('result:', result);
+    var self = this, result;
+    // replace /tmp/glob-test with self.absFixtureDir
+    pattern = pattern.replace('/tmp/glob-test', this.absFixtureDir);
+    expect = cleanResults(
+        expect.map(function(str) {
+            return str.replace('/tmp/glob-test', self.absFixtureDir);
+        }));
+    result = cleanResults(glob(pattern, { cwd: self.relativeFixtureDir }));
+
+    if (expect.length < 20) {
+      console.log('expect', expect);
+      console.log('result', result);
+    } else {
+      expect.forEach(function(value, i) {
+        var resultValue = result[i];
+        if (value != resultValue) {
+          console.log('diff', i, value, resultValue);
+        }
+      });
+    }
+
     assert.deepEqual(result, expect);
   };
 
