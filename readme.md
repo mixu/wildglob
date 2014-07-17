@@ -1,7 +1,7 @@
 
 ## Features
 
-- 2-3x faster than the `glob` module, with the same glob syntax
+- 2-3x faster than the [node-glob](https://github.com/isaacs/node-glob) module, with the same glob syntax
 - generic: supports multiple glob engines, allowing you to use the fastest glob engine available and compare performance between glob engines
   - currently works with wildmatch, minimatch and globy
 - supports multiple glob expressions for each search
@@ -18,7 +18,7 @@ Criteria for inclusion:
 
 Tested:
 
-- [isaacs/glob](https://github.com/isaacs/node-glob)
+- [isaacs/node-glob](https://github.com/isaacs/node-glob)
 - [isaacs/minimatch](https://github.com/isaacs/minimatch)
 - [vmeurisse/wildmatch](https://github.com/vmeurisse/wildmatch)
 - [norahiko/globy](https://github.com/norahiko/globy); looks interesting but comes with a native binding which seems a bit too much, fnmatch is undocumented but benchmarked here anyway.
@@ -39,20 +39,12 @@ I also had a look at [kthompson/glob-js](https://github.com/kthompson/glob-js) a
     <td>2.748s</td>
   </tr>
   <tr>
-    <td>wildglob sync (NOP)</td>
-    <td>3.490s</td>
-  </tr>
-  <tr>
     <td>wildglob sync (Minimatch)</td>
     <td>5.532s</td>
   </tr>
   <tr>
     <td>isaacs/glob sync</td>
     <td>13.418s</td>
-  </tr>
-  <tr>
-    <td>wildglob async (NOP)</td>
-    <td>11.083s</td>
   </tr>
   <tr>
     <td>wildglob async (Minimatch)</td>
@@ -64,9 +56,9 @@ I also had a look at [kthompson/glob-js](https://github.com/kthompson/glob-js) a
   </tr>
 </table>
 
-`NOP` refers to a no-op matcher, that is, a function that just returns `true` and does not actually perform any useful matching. From that, you can see that:
+When run with a no-op matcher, wildglob ran in 3.490s. From this we can conclude:
 
-- `wildglob` has an overhead of ~800ms over just using `fs` operations
+- that `wildglob` has an overhead of ~800ms over just using `fs` operations
 - that adding a matcher algorithms such as Minimatch adds another 2000ms or so
 - that interestingly, minimatch itself is quite fast, faster than wildmatch and the slowness in node-glob is mostly from management overhead rather than the matching engine itself (which definitely surprised me)
 
