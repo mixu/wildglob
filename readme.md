@@ -1,11 +1,92 @@
-readme.md
 
-- add support for partial matching, except for **; everything else must match a single segment at a time
-  - this means keeping a list of acceptable globs + indices into them
-  - ending with ** should be easy non-prune
-- prune before stat'ing; no need to stat anything that is pruned
-- support using multiple pruning expressions (e.g. !)
-- support multiple includes (avoid dup traversal)
+## Features
+
+- 2-3x faster than the `glob` module, with the same glob syntax
+- generic: supports multiple glob engines, allowing you to use the fastest glob engine available and compare performance between glob engines
+  - currently works with wildmatch, minimatch and globy
+- supports multiple glob expressions for each search
+- supports exclude/negative glob expressions
+- supports filtering out duplicates
+- supports streaming (can return a duplex stream, where the glob results are returned from the stream, and any values written to the stream are passed through)
+
+### Benchmarks
+
+Criteria for inclusion:
+
+- must support the basic glob syntax and globstars (`**`)
+- must not be a wrapper over minimatch or glob (there are fairly few truly independent implementations of glob matchers)
+
+Tested:
+
+- [isaacs/glob](https://github.com/isaacs/node-glob)
+- [isaacs/minimatch](https://github.com/isaacs/minimatch)
+- [vmeurisse/wildmatch](https://github.com/vmeurisse/wildmatch)
+- [norahiko/globy](https://github.com/norahiko/globy); looks interesting but comes with a native binding which seems a bit too much, fnmatch is undocumented but benchmarked here anyway.
+
+I also had a look at [kthompson/glob-js](https://github.com/kthompson/glob-js) and [fitzgen/glob-to-regexp](https://github.com/fitzgen/glob-to-regexp/) but they were missing key features such as globstar support and relative glob support and so I could not benchmark them.
+
+<table>
+  <tr>
+    <td></td>
+    <td>100k files, `**/*.txt`</td>
+  </tr>
+  <tr>
+    <td>`/bin/bash`</td>
+    <td>1.244s</td>
+  </tr>
+  <tr>
+    <td>node `statSync` + `readdirSync`</td>
+    <td>2.748s</td>
+  </tr>
+  <tr>
+    <td>wildglob sync (NOP)</td>
+    <td>3.490s</td>
+  </tr>
+  <tr>
+    <td>wildglob sync (Minimatch)</td>
+    <td>5.532s</td>
+  </tr>
+  <tr>
+    <td>isaacs/glob sync</td>
+    <td>13.418s</td>
+  </tr>
+  <tr>
+    <td>wildglob async (NOP)</td>
+    <td>11.083s</td>
+  </tr>
+  <tr>
+    <td>wildglob async (Minimatch)</td>
+    <td>13.418s</td>
+  </tr>
+  <tr>
+    <td>isaacs/glob async</td>
+    <td>1m0.365s</td>
+  </tr>
+</table>
+
+`NOP` refers to a no-op matcher, that is, a function that just returns `true` and does not actually perform any useful matching. From that, you can see that:
+
+- `wildglob` has an overhead of ~800ms over just using `fs` operations
+- that adding a matcher algorithms such as Minimatch adds another 2000ms or so
+- that interestingly, minimatch itself is quite fast, faster than wildmatch and the slowness in node-glob is mostly from management overhead rather than the matching engine itself (which definitely surprised me)
+
+This means that the majority of the time is spent on the matching logic.
+
+# API
+
+`glob(patterns, [opts], onDone)`
+
+`glob.sync(patterns, [opts])`
+
+`glob.stream(pattern, opts)`
+
+- `patterns`: a single glob string, or an array of glob expressions. To exclude items, start the glob with `!` to negate the match.
+- `opts.cwd`: The working directory; defaults to `process.cwd()`. All glob expressions which refer to a relative path e.g `*/**.js` or `./foo/*` are resolved in the working directory.
+- `opts.root`: When glob expressions refer to an absolute path e.g. `/foo/*`, resolve them as if the initial `/` was replaced with `opts.root`. Basically allows you to pretend that the fs root is somewhere else. Defaults to `/`.
+- `opts.engine`: a function with the following signature `function(filepath, glob, opts)`. Called for each file to perform an exact glob match; should return true if the glob pattern matches.
+- `opts.engineOpts`: passed to the matching engine
+- `opts.abspath`: normally, relative globs return relative paths and absolute globs return absolute paths. Setting `abspath` to true will cause all paths returned from `wildglob` to be full absolute paths.
+- `opts.fs`: allows substituting `fs` with a different object.
 
 ## Algorithm
 
@@ -27,35 +108,21 @@ However, stat'ing the whole file system is obviously inefficient, since we can u
 
 When the directory traversal starts, each include glob has been expanded so that only "tricky" parts remains. Matching a `?`, `*`, a globstar or a extglob is rather tricky - typically, glob implementations use backtracking to deal with wildcard expressions such as these expressions. This results in a fairly high branching factor particularly for globstars.
 
-### Benchmark
-
-
-
 ### Further preformance improvements
 
-An optimal implementation should use a minimum amount of CPU time and also avoid recursing into directories which will never produce matches. The latter part relies on the fixed portions of the glob expression having appropriate matches, which has diminishing returns once the prefix has been processed. Exclusions which will only speed up file matching will probably only have small returns.
+An optimal implementation should use a minimum amount of CPU time and also avoid recursing into directories which will never produce matches. The latter part relies on the fixed portions of the glob expression having appropriate matches, which has diminishing returns once the prefix has been processed. Exclusions which will only exclude files will probably only have small returns, while excluding large folders early on can have a larger impact.
+
+Here are a couple of ideas for
 
 - adding set expansion support (only improves performance for globs with sets)
 - adding expansion support for extglob contents (only improves performance for globs with extglob expressions)
-- performing full matching before traversing into a subdirectory
+- performing full matching before traversing into a subdirectory ([matched](https://github.com/jonschlinkert/matched) has a nice description of why you would want to do this)
   - on exclude expressions only consisting of strings and braces
   - on exclude expressions ending in a globstar
 - performing partial matching before traversing into a subdirectory
   - on include expressions (only where you can be certain that partial failure to match === complete failure to match => safe to exclude)
   - on exclude expressions (only where you can be certain that partial success === complete success => safe to exclude)
-- filter before stat()ing
-- speeding up the actual glob matching
-
-Two types of globs:
-
-- absolute globs: must be matched against the absolute path of each file
-- relative globs: must be matched against the relative path of each file
-
-
-# Options
-
-- `cwd`: The working directory in which to search for relative paths. Defaults to `process.cwd()`.
-
+- speeding up the actual glob matching: specifically, using a finite state machine to perform the matching
 
 ## Misc
 

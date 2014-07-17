@@ -3,51 +3,51 @@ var fs = require('fs'),
     wildmatch = require('wildmatch'),
     microee = require('microee'),
     parse = require('glob-parse'),
-    expand = require('mm-brace-expand');
+    expand = require('mm-brace-expand'),
+    parallel = require('miniq');
 
-// Totally based on the node-glob approach, though not using the exact same code.
-//
-// PROCESS(pattern)
-// Get the first [n] items from pattern that are all strings
-// Join these together.  This is PREFIX.
-//   If there is no more remaining, then stat(PREFIX) and
-//   add to matches if it succeeds.  END.
-// readdir(PREFIX) as ENTRIES
-//   If fails, END
-//   If pattern[n] is GLOBSTAR
-//     // handle the case where the globstar match is empty
-//     // by pruning it out, and testing the resulting pattern
-//     PROCESS(pattern[0..n] + pattern[n+1 .. $])
-//     // handle other cases.
-//     for ENTRY in ENTRIES (not dotfiles)
-//       // attach globstar + tail onto the entry
-//       PROCESS(pattern[0..n] + ENTRY + pattern[n .. $])
-//
-//   else // not globstar
-//     for ENTRY in ENTRIES (not dotfiles, unless pattern[n] is dot)
-//       Test ENTRY against pattern[n]
-//       If fails, continue
-//       If passes, PROCESS(pattern[0..n] + item + pattern[n+1 .. $])
-//
+function nop() {}
+function runTaskImmediately(task) { task(nop); }
 
 module.exports = glob;
 
 function glob(pattern, opts, onDone) {
+  var g = new Glob(pattern, opts);
   if (typeof opts === 'function') {
-    cb = opts;
-    opts = {};
+    onDone = opts;
   }
-  if (!opts) {
-    opts = {};
-  }
-  var g = new Glob(pattern, opts, onDone);
-  return g.sync ? g.found : g;
-}
 
-function Glob(pattern, opts, onDone) {
-  var self = this;
-  this.sync = true;
-  this.nomount = false;
+  g.queue.once('error', function() {
+    onDone(err);
+  });
+  g.queue.once('empty', function() {
+    onDone(null, g.found);
+  });
+
+  // run asynchronously
+  g.queue.exec(g._tasks(pattern));
+
+  return g;
+};
+
+glob.sync = function(pattern, opts) {
+  opts = opts || {};
+  opts.sync = true;
+  var g = new Glob(pattern, opts);
+
+  // run synchronously
+  g._tasks(pattern).forEach(runTaskImmediately);
+
+  return g.found;
+};
+
+function Glob(pattern, opts) {
+  if (typeof opts === 'function') {
+    opts = {};
+  }
+  opts = opts || {};
+
+  this.sync = opts.sync;
   this.cwd = opts.cwd || process.cwd();
   this.root = path.resolve(this.cwd, '/');
   this.root = path.resolve(this.root);
@@ -55,27 +55,35 @@ function Glob(pattern, opts, onDone) {
     this.root = this.root.replace(/\\/g, '/');
   }
 
-  // set up the wildmatch filter, which simply checks the emitted files against
-  // the pattern
+  this.fs = opts.fs || fs;
+  // Setting parallellism to infinity really helps in clearing out the async queue
+  this.queue = parallel(Infinity);
+  // Never need to break the queue, as all tasks are truely async
+  this.queue.maxStack = Infinity;
   this.found = [];
 
   this.pattern = this._normalize(pattern);
-  console.log('pattern', pattern, this.pattern);
-  this._process(pattern);
 }
 
 microee.mixin(Glob);
 
+var minimatch = require('minimatch');
+// var globy = require('globy');
+
 Glob.prototype._filter = function(filepath) {
-  var isMatch = wildmatch(filepath, this.pattern, { pathname: true });
+  // var isMatch = wildmatch(filepath, this.pattern, { pathname: true });
+  var isMatch = minimatch(filepath, this.pattern);
+  // var isMatch = true;
+  // var isMatch = globy.fnmatch(this.pattern, filepath);
+
   // console.log('_filter', filepath, this.pattern, wildmatch(filepath, this.pattern, { pathname: true }));
-  totalFilterCalls++;
   if (isMatch) {
     this.found.push(filepath);
   }
   return isMatch;
 };
 
+// via Node core path.js
 function normalizeArray(parts, allowAboveRoot) {
   // if the path tries to go above the root, `up` ends up > 0
   var up = 0;
@@ -182,62 +190,52 @@ Glob.prototype._basenames = function(glob) {
   return result;
 };
 
-Glob.prototype._process = function(pattern) {
+Glob.prototype._tasks = function(pattern) {
   var self = this,
       prefix = '',
       i = 0;
 
   var basenames = this._basenames(pattern);
 
-  console.log(basenames);
+  return basenames.map(function(prefix) {
+    return function(done) {
+      var read,
+          strip = '';
+      // now that the prefix has been parsed, determine where we should start and
+      // how we should normalize the paths when attempting to match against the current pattern
 
-  basenames.forEach(function(prefix) {
-    // see if there's anything else
-    var read;
-    var strip = '';
-    // is the only way to glob the root is to glob an absolute path expression ???
-    // e.g. `*` => empty prefix => `./`
-
-
-    // can be one of:
-    // 1) the prefix is empty (pattern does not start with a string or a brace expression)
-    if (prefix === '') {
-      // pattern *starts* with some non-trivial item.
-      read = self.cwd;
-      strip = self.cwd;
-    } else {
-      // 2) the prefix is a path
-
-      // pattern has some string bits in the front.
-      // whatever it starts with, whether that's "absolute" like /foo/bar,
-      // or "relative" like "../baz"
-      read = prefix;
-
-      if (isAbsolute(prefix)) {
-        // 2a) absolute path
-        if (!prefix) {
-          prefix = "/";
-        }
-        // absolute paths are mounted at this.root
-        read = path.join(self.root, prefix);
-      } else {
-        // 2b) relative path
-        // relative paths are resolved against this.cwd
-        read = path.resolve(self.cwd, prefix);
+      // can be one of:
+      // 1) the prefix is empty (pattern does not start with a string or a brace expression)
+      if (prefix === '') {
+        // pattern *starts* with some non-trivial item.
+        // the only way to glob the root is to glob an absolute path expression, so use cwd
+        // e.g. `*` => empty prefix => `./`
+        read = self.cwd;
         strip = self.cwd;
+      } else {
+        // 2) the prefix is a path (cannot be empty)
+        if (isAbsolute(prefix)) {
+          // 2a) exprs with absolute paths are mounted at this.root and have no prefix to remove
+          read = path.join(self.root, prefix);
+        } else {
+          // 2b) exprs with relative paths are resolved against this.cwd
+          // but have cwd removed when matching
+          read = path.resolve(self.cwd, prefix);
+          strip = self.cwd;
+        }
       }
-    }
-    // now read the directory and all subdirectories:
-    // if wildmatch supported partial matches we could prune the tree much earlier
+      // now read the directory and all subdirectories:
+      // if wildmatch supported partial matches we could prune the tree much earlier
+      // console.log('dostat', prefix, 'read', read, 'remove', strip);
 
-    console.log('dostat', prefix, 'read', read, 'remove', strip);
-
-    self._doStat(read, strip, false);
+      self._doStat(read, strip, false, done);
+    };
   });
 };
 
-Glob.prototype._doStat = function(read, strip, knownToExist) {
-  var self = this;
+Glob.prototype._doStat = function(filepath, strip, knownToExist, onDone) {
+  var self = this,
+      exec = (self.sync ? runTaskImmediately : self.queue.exec.bind(self.queue));
 
   function absToRel(str) {
     if (strip.length === 0) {
@@ -247,99 +245,124 @@ Glob.prototype._doStat = function(read, strip, knownToExist) {
     return (str.substr(0, strip.length) == strip ? str.substr(strip.length + 1) : str);
   }
 
-  function resolveDir(dirname) {
-    // if the input is a directory, add all files in it, but do not add further directories
-    var basepath = (dirname[dirname.length - 1] !== path.sep ? dirname + path.sep : dirname);
-    self._readdir(basepath, function(err, entries) {
-      entries.forEach(function(f) {
-        if (f.charAt(0) === '.') {
-          return;
-        }
-        self._doStat(basepath + f, strip, true);
-      });
-    });
-  }
+  // the order between stat and filter does not matter, because we'll need to stat each
+  // entry anyway to know if it's a dir, even if it fails the filter check (since the full path
+  // can still match even if the current partial does not)
+  // if we had accurate partial matching then yes, then filter before stat is slightly better.
+  this._stat(filepath, function(err, stat) {
+    var exists,
+        isDir = false;
+    if (err) {
+      switch(e.code) {
+        case 'ELOOP':
+          // like Minimatch, ignore ELOOP for purposes of existence check but not
+          // for the actual stat()ing
+          exists = knownToExist;
+          break;
+        default:
+          console.error(e);
+          console.error(e.stack);
+        case 'ENOENT':
+          // ignore ENOENT (per Node core docs, "fs.exists() is an anachronism
+          // and exists only for historical reasons. In particular, checking if a file
+          // exists before opening it is an anti-pattern")
+          exists = false;
+      }
+    } else {
+      exists = true;
+      isDir = stat.isDirectory();
+    }
 
-  this._stat(read, knownToExist, function(exists, isDir) {
     // console.log('resolve', filepath, exists, isDir);
     // this where partial matches against a pending traversal would help by pruning the tree
     if (isDir) {
-      resolveDir(read);
       // try without a trailing slash
-      if (!self._filter(absToRel(read))) {
+      if (!self._filter(absToRel(filepath))) {
         // needed so that wildmatch treats dirs correctly (in some cases)
-        if (read.charAt(read.length - 1) != '/') {
-          self._filter(absToRel(read + '/'));
+        if (filepath.charAt(filepath.length - 1) != '/') {
+          self._filter(absToRel(filepath + '/'));
         }
       }
+      // if the input is a directory, readdir and process all entries in it
+      var basepath = (filepath[filepath.length - 1] !== path.sep ? filepath + path.sep : filepath);
+      self._readdir(basepath, function(err, entries) {
+        if (err) {
+          switch(e.code) {
+            case 'ENOTDIR':
+            case 'ENOENT':
+            case 'ELOOP':
+            case 'ENAMETOOLONG':
+            case 'UNKNOWN':
+              break;
+            default:
+              self.emit('error', e);
+              console.error(e);
+              console.error(e.stack);
+          }
+          entries = [];
+        }
+        entries.forEach(function(f) {
+          if (f.charAt(0) === '.') {
+            return;
+          }
+          // queue a stat operation
+          exec(function(done) { self._doStat(basepath + f, strip, true, done); });
+        });
+        // tasks have been queued so this entry is done
+        onDone();
+      });
     } else if (exists) {
-      self._filter(absToRel(read));
-    };
+      self._filter(absToRel(filepath));
+      // no readdir, so the stat for this entry is done
+      onDone();
+    }
   });
 };
 
-Glob.prototype._stat = function(p, knownToExist, onDone) {
-  var stat;
-  try {
-    stat = fs.statSync(p);
-  } catch (e) {
-    switch(e.code) {
-      case 'ELOOP':
-        // like Minimatch, ignore ELOOP for purposes of existence check but not
-        // for the actual stat()ing
-        return onDone(knownToExist, false);
-        break;
-      default:
-        console.error(e);
-        console.error(e.stack);
-      case 'ENOENT':
-        // ignore ENOENT (per Node core docs, "fs.exists() is an anachronism
-        // and exists only for historical reasons. In particular, checking if a file
-        // exists before opening it is an anti-pattern")
-        return onDone(false, false);
+Glob.prototype._stat = function(p, onDone) {
+  var stat, err;
+  if (this.sync) {
+    try {
+      stat = this.fs.statSync(p);
+    } catch (e) {
+      err = e;
     }
+    onDone(err, stat);
+  } else {
+    this.fs.stat(p, onDone);
   }
-  return onDone(!!stat, stat.isDirectory());
 };
 
 Glob.prototype._readdir = function(p, onDone) {
-  var entries;
-  try {
-    entries = fs.readdirSync(p);
-  } catch (e) {
-    switch(e.code) {
-      case 'ENOTDIR':
-      case 'ENOENT':
-      case 'ELOOP':
-      case 'ENAMETOOLONG':
-      case 'UNKNOWN':
-        return onDone(e, []);
-      default:
-        this.emit('error', e);
-        console.error(e);
-        console.error(e.stack);
-        return onDone(e, []);
+  var self = this, entries, err;
+
+  if (this.sync) {
+    try {
+      entries = this.fs.readdirSync(p);
+    } catch (e) {
+      err = e;
     }
+    onDone(err, entries);
+  } else {
+    this.fs.readdir(p, onDone);
   }
-  return onDone(null, entries);
 };
 
-var isAbsolute = process.platform === "win32" ? absWin : absUnix
+var isAbsolute = process.platform === "win32" ? absWin : absUnix;
 
 function absWin (p) {
-  if (absUnix(p)) return true
+  if (absUnix(p)) { return true; }
   // pull off the device/UNC bit from a windows path.
   // from node's lib/path.js
-  var splitDeviceRe =
-      /^([a-zA-Z]:|[\\\/]{2}[^\\\/]+[\\\/]+[^\\\/]+)?([\\\/])?([\s\S]*?)$/
-    , result = splitDeviceRe.exec(p)
-    , device = result[1] || ''
-    , isUnc = device && device.charAt(1) !== ':'
-    , isAbsolute = !!result[2] || isUnc // UNC paths are always absolute
+  var splitDeviceRe = /^([a-zA-Z]:|[\\\/]{2}[^\\\/]+[\\\/]+[^\\\/]+)?([\\\/])?([\s\S]*?)$/,
+      result = splitDeviceRe.exec(p),
+      device = result[1] || '',
+      isUnc = device && device.charAt(1) !== ':',
+      isAbsolute = !!result[2] || isUnc; // UNC paths are always absolute
 
   return isAbsolute
 }
 
 function absUnix (p) {
-  return p.charAt(0) === "/" || p === ""
+  return (p.charAt(0) === "/" || p === "");
 }
