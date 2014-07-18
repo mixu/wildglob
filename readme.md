@@ -11,11 +11,6 @@
 
 ### Benchmarks
 
-Criteria for inclusion:
-
-- must support the basic glob syntax and globstars (`**`)
-- must not be a wrapper over minimatch or glob (there are fairly few truly independent implementations of glob matchers)
-
 Tested:
 
 - [isaacs/node-glob](https://github.com/isaacs/node-glob)
@@ -23,7 +18,9 @@ Tested:
 - [vmeurisse/wildmatch](https://github.com/vmeurisse/wildmatch)
 - [norahiko/globy](https://github.com/norahiko/globy); looks interesting but comes with a native binding which seems a bit too much, fnmatch is undocumented but benchmarked here anyway.
 
-I also had a look at [kthompson/glob-js](https://github.com/kthompson/glob-js) and [fitzgen/glob-to-regexp](https://github.com/fitzgen/glob-to-regexp/) but they were missing key features such as globstar support and relative glob support and so I could not benchmark them.
+I also had a look at [kthompson/glob-js](https://github.com/kthompson/glob-js) and [fitzgen/glob-to-regexp](https://github.com/fitzgen/glob-to-regexp/) but they were missing key features such as globstar support and relative glob support and so I could not benchmark them. Most other glob modules on npm are just wrappers over minimatch or node-glob.
+
+The following numbers are from a VM running on a Macbook Pro:
 
 <table>
   <tr>
@@ -39,30 +36,29 @@ I also had a look at [kthompson/glob-js](https://github.com/kthompson/glob-js) a
     <td>2.748s</td>
   </tr>
   <tr>
-    <td>wildglob sync (Minimatch)</td>
+    <td>wildglob sync (minimatch)</td>
     <td>5.532s</td>
   </tr>
   <tr>
-    <td>isaacs/glob sync</td>
+    <td>isaacs/node-glob sync</td>
     <td>13.418s</td>
   </tr>
   <tr>
-    <td>wildglob async (Minimatch)</td>
-    <td>13.418s</td>
+    <td>wildglob async (minimatch)</td>
+    <td>12.287s</td>
   </tr>
   <tr>
-    <td>isaacs/glob async</td>
+    <td>isaacs/node-glob async</td>
     <td>1m0.365s</td>
   </tr>
 </table>
 
-When run with a no-op matcher, wildglob ran in 3.490s. From this we can conclude:
+When run with a no-op matcher (e.g. a useless but fast function that returns true for every item), wildglob ran in 3.490s. From this we can conclude:
 
+- that the `.sync()` calls which use synchronous I/O are faster than the `.async()` calls
 - that `wildglob` has an overhead of ~800ms over just using `fs` operations
-- that adding a matcher algorithms such as Minimatch adds another 2000ms or so
+- that adding a matcher algorithm such as minimatch adds another 2000ms or so; in `wildglob` the majority of the runtime is spent on the matching itself
 - that interestingly, minimatch itself is quite fast, faster than wildmatch and the slowness in node-glob is mostly from management overhead rather than the matching engine itself (which definitely surprised me)
-
-This means that the majority of the time is spent on the matching logic.
 
 # API
 
@@ -75,8 +71,7 @@ This means that the majority of the time is spent on the matching logic.
 - `patterns`: a single glob string, or an array of glob expressions. To exclude items, start the glob with `!` to negate the match.
 - `opts.cwd`: The working directory; defaults to `process.cwd()`. All glob expressions which refer to a relative path e.g `*/**.js` or `./foo/*` are resolved in the working directory.
 - `opts.root`: When glob expressions refer to an absolute path e.g. `/foo/*`, resolve them as if the initial `/` was replaced with `opts.root`. Basically allows you to pretend that the fs root is somewhere else. Defaults to `/`.
-- `opts.engine`: a function with the following signature `function(filepath, glob, opts)`. Called for each file to perform an exact glob match; should return true if the glob pattern matches.
-- `opts.engineOpts`: passed to the matching engine
+- `opts.match`: a function with the following signature `function(filepath, glob)`. Called for each file to perform an exact glob match; should return true if the glob pattern matches.
 - `opts.abspath`: normally, relative globs return relative paths and absolute globs return absolute paths. Setting `abspath` to true will cause all paths returned from `wildglob` to be full absolute paths.
 - `opts.fs`: allows substituting `fs` with a different object.
 
@@ -118,14 +113,11 @@ Here are a couple of ideas for
 
 ## Misc
 
-Glob implementations:
+Other glob implementations:
 
 - [git glob](https://github.com/git/git/blob/master/wildmatch.c)
 - [Go glob](http://golang.org/src/pkg/path/filepath/match.go?s=5450:5505#L221)
 - [Python glob](http://hg.python.org/cpython/file/2.7/Lib/fnmatch.py)
-- [Java nio glob](http://grepcode.com/file/repository.grepcode.com/java/root/jdk/openjdk/7-b147/sun/nio/fs/Globs.java)
+- [Java nio glob](http://grepcode.com/file/repository.grepcode.com/java/root/jdk/openjdk/7-b147/sun/nio/fs/Globs.java), [[2](https://github.com/rtyley/globs-for-java/blob/master/src/main/java/com/madgag/globs/openjdk/Globs.java)]
 - [bash glob](http://git.savannah.gnu.org/cgit/bash.git/tree/lib/glob/glob.c)
 - [BSD fnmatch](http://web.mit.edu/freebsd/csup/fnmatch.c)
-
-
-bash -c "cd /tmp/dza5dosbiq9f6r/tyj28xi2nco6flxr/ && shopt -s globstar && shopt -s extglob && shopt -s nullglob && eval 'for i in test/a/*/+(c|g)/./d; do echo \$i; done' "

@@ -1,10 +1,11 @@
 var fs = require('fs'),
     path = require('path'),
-    wildmatch = require('wildmatch'),
+    minimatch = require('minimatch'),
     microee = require('microee'),
     parse = require('glob-parse'),
     expand = require('mm-brace-expand'),
-    parallel = require('miniq');
+    parallel = require('miniq'),
+    through2 = require('through2');
 
 function nop() {}
 function runTaskImmediately(task) { task(nop); }
@@ -12,21 +13,9 @@ function runTaskImmediately(task) { task(nop); }
 module.exports = glob;
 
 function glob(pattern, opts, onDone) {
-  var g = new Glob(pattern, opts);
-  if (typeof opts === 'function') {
-    onDone = opts;
-  }
-
-  g.queue.once('error', function() {
-    onDone(err);
-  });
-  g.queue.once('empty', function() {
-    onDone(null, g.found);
-  });
-
+  var g = new Glob(pattern, opts, onDone);
   // run asynchronously
   g.queue.exec(g._tasks(pattern));
-
   return g;
 };
 
@@ -41,8 +30,23 @@ glob.sync = function(pattern, opts) {
   return g.found;
 };
 
-function Glob(pattern, opts) {
+glob.stream = function(pattern, opts) {
+  var g = new Glob(pattern, opts),
+      stream = through2.obj();
+
+  g.on('error', stream.emit.bind(stream, 'error'));
+  g.on('match', function(filepath) {
+    stream.write(filepath);
+  });
+  g.once('end', function() { stream.end(); });
+  g.queue.exec(g._tasks(pattern));
+  return stream;
+};
+
+function Glob(pattern, opts, onDone) {
+  var self = this;
   if (typeof opts === 'function') {
+    onDone = opts;
     opts = {};
   }
   opts = opts || {};
@@ -61,24 +65,36 @@ function Glob(pattern, opts) {
   // Never need to break the queue, as all tasks are truely async
   this.queue.maxStack = Infinity;
   this.found = [];
-
   this.pattern = this._normalize(pattern);
+  // default matching function is minimatch
+  this.match = opts.match || minimatch;
+
+  // attach listeners
+  this.queue.once('empty', function() {
+    self.emit('end');
+  });
+  if (typeof onDone === 'function') {
+    this.queue.once('error', function(err) {
+      onDone(err);
+    });
+    this.queue.once('empty', function() {
+      onDone(null, self.found);
+    });
+  }
 }
 
 microee.mixin(Glob);
 
-var minimatch = require('minimatch');
-// var globy = require('globy');
-
 Glob.prototype._filter = function(filepath) {
-  // var isMatch = wildmatch(filepath, this.pattern, { pathname: true });
-  var isMatch = minimatch(filepath, this.pattern);
-  // var isMatch = true;
-  // var isMatch = globy.fnmatch(this.pattern, filepath);
+  if (filepath === '') {
+    return false;
+  }
+  var isMatch = this.match(filepath, this.pattern);
 
   // console.log('_filter', filepath, this.pattern, wildmatch(filepath, this.pattern, { pathname: true }));
   if (isMatch) {
     this.found.push(filepath);
+    this.emit('match', filepath);
   }
   return isMatch;
 };
@@ -169,13 +185,10 @@ Glob.prototype._basenames = function(glob) {
       result = [ prefix ];
     }
 
-    console.log('result', prefix, result);
     return result;
   }
 
   result = getPrefix(glob);
-
-  console.log('final', result);
 
   // always make the base path end with a /
   // this avoids issues with expressions such as `js/t[a-z]` or `js/foo.js`
