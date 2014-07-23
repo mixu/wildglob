@@ -74,7 +74,7 @@ globs.forEach(function (pattern) {
         expect.map(function(str) {
             return str.replace('/tmp/glob-test', self.absFixtureDir);
         }));
-    result = cleanResults(glob(pattern, { cwd: self.relativeFixtureDir }));
+    result = cleanResults(glob.sync(pattern, { cwd: self.relativeFixtureDir }));
 
     if (expect.length < 20) {
       console.log('expect', expect);

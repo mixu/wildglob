@@ -26,6 +26,9 @@ glob.sync = function(pattern, opts) {
 
   // run synchronously
   g._tasks(pattern).forEach(runTaskImmediately);
+  g.on('error', function(err) {
+    throw err;
+  });
 
   return g.found;
 };
@@ -65,7 +68,7 @@ function Glob(pattern, opts, onDone) {
   // Never need to break the queue, as all tasks are truely async
   this.queue.maxStack = Infinity;
   this.found = [];
-  this.pattern = this._normalize(pattern);
+  this.pattern = pattern;
   // default matching function is minimatch
   this.match = opts.match || minimatch;
 
@@ -91,64 +94,12 @@ Glob.prototype._filter = function(filepath) {
   }
   var isMatch = this.match(filepath, this.pattern);
 
-  // console.log('_filter', filepath, this.pattern, wildmatch(filepath, this.pattern, { pathname: true }));
+  // console.log('_filter', filepath, this.pattern, isMatch);
   if (isMatch) {
     this.found.push(filepath);
     this.emit('match', filepath);
   }
   return isMatch;
-};
-
-// via Node core path.js
-function normalizeArray(parts, allowAboveRoot) {
-  // if the path tries to go above the root, `up` ends up > 0
-  var up = 0;
-  for (var i = parts.length - 1; i >= 0; i--) {
-    var last = parts[i];
-    if (last === '.') {
-      parts.splice(i, 1);
-    } else if (last === '..') {
-      parts.splice(i, 1);
-      up++;
-    } else if (up) {
-      parts.splice(i, 1);
-      up--;
-    }
-  }
-
-  // if the path is allowed to go above the root, restore leading ..s
-  if (allowAboveRoot) {
-    for (; up--; up) {
-      parts.unshift('..');
-    }
-  }
-
-  return parts;
-}
-
-Glob.prototype._normalize = function(glob) {
-  var self = this;
-  var parsed = parse(glob, { full: true });
-  return parsed.parts.map(function(part, i) {
-    if (parsed.types[i] === 'brace') {
-      // console.log(part.substring(1, part.length - 1));
-
-      return '{' + self._normalize(part.substring(1, part.length - 1) ) + '}';
-    }
-    if (parsed.types[i] !== 'str') {
-      return part;
-    }
-    // console.log('np', part);
-    // preserve the leading and trailing slashes
-    var isOnlySlash = /^\/\/+$/.test(part),
-        leadingSlash = (part[0] === '/'),
-        trailingSlash = (part[part.length - 1] === '/' && part.length > 2 && !isOnlySlash);
-    return (leadingSlash ? '/' : '') +
-      normalizeArray(part.split(/[\\\/]+/).filter(function(p) {
-        return !!p;
-      }), !isAbsolute(part)).join('/') +
-      (trailingSlash ? '/' : '');
-  }).join('');
 };
 
 // this is like glob-parse.basename() but also performs brace expansion
@@ -210,10 +161,13 @@ Glob.prototype._tasks = function(pattern) {
 
   var basenames = this._basenames(pattern);
 
+  console.log(basenames);
+
   return basenames.map(function(prefix) {
     return function(done) {
       var read,
-          strip = '';
+          strip = '',
+          affix = '';
       // now that the prefix has been parsed, determine where we should start and
       // how we should normalize the paths when attempting to match against the current pattern
 
@@ -235,18 +189,24 @@ Glob.prototype._tasks = function(pattern) {
           // but have cwd removed when matching
           read = path.resolve(self.cwd, prefix);
           strip = self.cwd;
+          // affix the prefix for relative matches, e.g.
+          // ./**/* => full path => remove cwd => restore "./" => match
+          // TODO: investigate more prefixes
+          if (prefix.substr(0, 2) === './') {
+            affix = './';
+          }
         }
       }
       // now read the directory and all subdirectories:
       // if wildmatch supported partial matches we could prune the tree much earlier
-      // console.log('dostat', prefix, 'read', read, 'remove', strip);
+      console.log('dostat', prefix, 'read', read, 'remove', strip, affix);
 
-      self._doStat(read, strip, false, done);
+      self._doStat(read, strip, affix, false, done);
     };
   });
 };
 
-Glob.prototype._doStat = function(filepath, strip, knownToExist, onDone) {
+Glob.prototype._doStat = function(filepath, strip, affix, knownToExist, onDone) {
   var self = this,
       exec = (self.sync ? runTaskImmediately : self.queue.exec.bind(self.queue));
 
@@ -266,20 +226,22 @@ Glob.prototype._doStat = function(filepath, strip, knownToExist, onDone) {
     var exists,
         isDir = false;
     if (err) {
-      switch(e.code) {
+      switch(err.code) {
         case 'ELOOP':
           // like Minimatch, ignore ELOOP for purposes of existence check but not
           // for the actual stat()ing
           exists = knownToExist;
           break;
-        default:
-          console.error(e);
-          console.error(e.stack);
         case 'ENOENT':
           // ignore ENOENT (per Node core docs, "fs.exists() is an anachronism
           // and exists only for historical reasons. In particular, checking if a file
           // exists before opening it is an anti-pattern")
           exists = false;
+          break;
+        default:
+          exists = false;
+          console.error(err);
+          console.error(err.stack);
       }
     } else {
       exists = true;
@@ -290,17 +252,18 @@ Glob.prototype._doStat = function(filepath, strip, knownToExist, onDone) {
     // this where partial matches against a pending traversal would help by pruning the tree
     if (isDir) {
       // try without a trailing slash
-      if (!self._filter(absToRel(filepath))) {
+      if (!self._filter(affix + absToRel(filepath))) {
         // needed so that wildmatch treats dirs correctly (in some cases)
         if (filepath.charAt(filepath.length - 1) != '/') {
-          self._filter(absToRel(filepath + '/'));
+          self._filter(affix + absToRel(filepath + '/'));
         }
       }
       // if the input is a directory, readdir and process all entries in it
       var basepath = (filepath[filepath.length - 1] !== path.sep ? filepath + path.sep : filepath);
       self._readdir(basepath, function(err, entries) {
         if (err) {
-          switch(e.code) {
+          console.log(err);
+          switch(err.code) {
             case 'ENOTDIR':
             case 'ENOENT':
             case 'ELOOP':
@@ -308,9 +271,9 @@ Glob.prototype._doStat = function(filepath, strip, knownToExist, onDone) {
             case 'UNKNOWN':
               break;
             default:
-              self.emit('error', e);
-              console.error(e);
-              console.error(e.stack);
+              self.emit('error', err);
+              console.error(err);
+              console.error(err.stack);
           }
           entries = [];
         }
@@ -319,13 +282,13 @@ Glob.prototype._doStat = function(filepath, strip, knownToExist, onDone) {
             return;
           }
           // queue a stat operation
-          exec(function(done) { self._doStat(basepath + f, strip, true, done); });
+          exec(function(done) { self._doStat(basepath + f, strip, affix, true, done); });
         });
         // tasks have been queued so this entry is done
         onDone();
       });
     } else if (exists) {
-      self._filter(absToRel(filepath));
+      self._filter(affix + absToRel(filepath));
       // no readdir, so the stat for this entry is done
       onDone();
     }

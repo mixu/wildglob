@@ -1,4 +1,5 @@
 var fs = require('fs'),
+    path = require('path'),
     assert = require('assert'),
     Fixture = require('file-fixture'),
     glob = require('../index.js');
@@ -13,17 +14,17 @@ exports['tests'] = {
       'foo/bar/aa.js': 'test',
       'foo/bar/aa.txt': 'test'
     }, {});
-/*
+
     this.relativeFixtureDir = this.fixture.dir({
       'a/.abcdef/x/y/z/a': 'i like tests',
       'a/abcdef/g/h': 'i like tests',
       'a/abcfed/g/h': 'i like tests',
-      'b/c/d': 'i like tests',
-      'bc/e/f': 'i like tests',
-      'c/d/c/b': 'i like tests',
-      'cb/e/f': 'i like tests'
-    });
-
+      'a/b/c/d': 'i like tests',
+      'a/bc/e/f': 'i like tests',
+      'a/c/d/c/b': 'i like tests',
+      'a/cb/e/f': 'i like tests',
+    }, {});
+/*
     this.absFixtureDir = this.fixture.dirname();
     [ 'foo', 'bar', 'baz', 'asdf', 'quux', 'qwer', 'rewq'].forEach(function (w) {
       fs.mkdirSync(self.absFixtureDir + '/' + w);
@@ -33,19 +34,19 @@ exports['tests'] = {
 
   'basic sync': {
     'foo/**/*.js works': function() {
-      var result = glob('foo/**/*.js', { cwd: this.basicFixtureDir }).sort();
+      var result = glob.sync('foo/**/*.js', { cwd: this.basicFixtureDir }).sort();
       assert.deepEqual(result, [ 'foo/aa.js', 'foo/bar/aa.js' ]);
     },
 
     './foo/**/*.js works': function() {
-      var result = glob('./foo/**/*.js', { cwd: this.basicFixtureDir }).sort();
+      var result = glob.sync('./foo/**/*.js', { cwd: this.basicFixtureDir }).sort();
       console.log(result);
       assert.deepEqual(result, [  './foo/aa.js', './foo/bar/aa.js' ]);
     },
 
     '__dirname + /foo/**/*.js works': function() {
       var self = this,
-          result = glob(this.basicFixtureDir + '/foo/**/*.js').sort();
+          result = glob.sync(this.basicFixtureDir + '/foo/**/*.js').sort();
       console.log(result);
       assert.deepEqual(result, [ 'foo/aa.js', 'foo/bar/aa.js' ].map(function(str) {
         return self.basicFixtureDir + '/' + str;
@@ -57,39 +58,39 @@ exports['tests'] = {
 
     'before': function() {
       this.origCwd = process.cwd();
-      process.chdir(__dirname);
+      process.chdir(this.relativeFixtureDir);
     },
 
     'after': function() {
-      process.chdir(origCwd);
+      process.chdir(this.origCwd);
     },
 
     '.': function() {
-      var result = glob('**/d').sort();
+      var result = glob.sync('**/d').sort();
       console.log(result);
       assert.deepEqual(result,  [ 'a/b/c/d', 'a/c/d' ]);
     },
 
     'a': function() {
-      var result = glob('**/d', { cwd: path.resolve('a') });
+      var result = glob.sync('**/d', { cwd: path.resolve('a') });
       console.log(result);
       assert.deepEqual(result,  [ 'b/c/d', 'c/d' ]);
     },
 
     'a/b': function() {
-      var result = glob('**/d', { cwd: path.resolve('a/b') });
+      var result = glob.sync('**/d', { cwd: path.resolve('a/b') });
       console.log(result);
       assert.deepEqual(result,  [ 'c/d' ]);
     },
 
     'a/b/': function() {
-      var result = glob('**/d', { cwd: path.resolve('a/b/') });
+      var result = glob.sync('**/d', { cwd: path.resolve('a/b/') });
       console.log(result);
       assert.deepEqual(result,  [ 'c/d' ]);
     },
 
     'process.cwd': function() {
-      var result = glob('**/d', { cwd: process.cwd() }).sort();
+      var result = glob.sync('**/d', { cwd: process.cwd() }).sort();
       console.log(result);
       assert.deepEqual(result,  [ 'a/b/c/d', 'a/c/d' ]);
     }
@@ -97,28 +98,28 @@ exports['tests'] = {
 
   'empty-set.js - Patterns that cannot match anything': {
     '# comment': function() {
-      var result = glob('# comment').sort();
+      var result = glob.sync('# comment').sort();
       console.log(result);
       // no error thrown
       assert.deepEqual(result, []);
     },
 
     ' ': function() {
-      var result = glob(' ').sort();
+      var result = glob.sync(' ').sort();
       console.log(result);
       // no error thrown
       assert.deepEqual(result, []);
     },
 
     '\n': function() {
-      var result = glob('\n').sort();
+      var result = glob.sync('\n').sort();
       console.log(result);
       // no error thrown
       assert.deepEqual(result, []);
     },
 
     'just doesnt happen to match anything so this is a control': function() {
-      var result = glob('just doesnt happen to match anything so this is a control').sort();
+      var result = glob.sync('just doesnt happen to match anything so this is a control').sort();
       console.log(result);
       // no error thrown
       assert.deepEqual(result, []);
@@ -128,28 +129,42 @@ exports['tests'] = {
   'error-callback.js - Ensure that fs errors do not cause duplicate errors': {
 
     before: function() {
-      self.oldReaddir = fs.readdir;
+      this.oldReaddir = fs.readdir;
+      this.oldReaddirSync = fs.readdirSync;
 
       fs.readdir = function(path, cb) {
         process.nextTick(function() {
           cb(new Error('mock fs.readdir error'));
         });
       };
+
+      fs.readdirSync = function(path) {
+        throw new Error('mock fs.readdirSync error');
+      };
     },
 
     // todo: async is probably better for these
-    'error callback': function() {
+    'error callback - sync': function() {
+      var err = false;
       try {
-        glob('*');
+        glob.sync('*');
       } catch (e) {
         // expecting an error
-        assert.ok(true);
+        err = e;
       }
-      assert.ok(false);
+      assert.ok(err, 'expecting error');
+    },
+
+    'error callback - async': function(done) {
+      glob('*', function(err) {
+        assert.ok(err);
+        done();
+      });
     },
 
     after: function() {
-      fs.readdir = self.oldReaddir;
+      fs.readdir = this.oldReaddir;
+      fs.readdirSync = this.oldReaddirSync;
     }
   }
 };

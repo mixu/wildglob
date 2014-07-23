@@ -68,6 +68,17 @@ exports['tests'] = {
     assert.deepEqual(calls.sort(), all);
   },
 
+  'can set abspath = true and receive absolute paths': function() {
+    var self = this,
+        files = glob.sync('./**/*.*', { abspath: true, cwd: this.fixDir });
+
+    assert.deepEqual(files.sort(),
+      [ 'vendor/js/bar.js', 'vendor/js/baz.js', 'vendor/js/foo.js'].map(function(p) {
+        return self.fixDir + '/' + p;
+      })
+    );
+  },
+
 //  'can add negated patterns, values matching negated patterns are excluded': function() {
 //    var files = glob.sync(['**/*.js', '!**/*z.js']);
 //    assert.deepEqual(files, ['vendor/js/bar.js'] );
@@ -77,11 +88,6 @@ exports['tests'] = {
 //    var files = glob.sync('/foo/bar', { root: });
 //
 //  },
-//
-//  'can set abspath = true and receive absolute paths': function() {
-//    var files = glob.sync('./**/*', { abspath: true });
-//
-//  }
 };
 
 // if this module is the script being run, then run the tests:
