@@ -4,7 +4,8 @@ module.exports = {
     // the pattern was "test/a/b/c/./d" but the dot variant handling is not supported yet
     // so just using the dotless pattern
   ],
-// I don't think this test will run
+// Again, we don't do the whole dot dot expansion in wildglob
+//
 //  "test/a/**/[cg]/../[cg]": [
 //    "test/a/abcdef/g/../g",
 //    "test/a/abcfed/g/../g",

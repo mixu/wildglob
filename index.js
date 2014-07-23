@@ -71,16 +71,26 @@ function Glob(pattern, opts, onDone) {
   this.pattern = pattern;
   // default matching function is minimatch
   this.match = opts.match || minimatch;
+  this.abspath = opts.abspath || false;
 
   // attach listeners
   this.queue.once('empty', function() {
     self.emit('end');
   });
+  var calledDone = false;
   if (typeof onDone === 'function') {
-    this.queue.once('error', function(err) {
+    this.once('error', function(err) {
+      if (calledDone) {
+        return;
+      }
+      calledDone = true;
       onDone(err);
     });
     this.queue.once('empty', function() {
+      if (calledDone) {
+        return;
+      }
+      calledDone = true;
       onDone(null, self.found);
     });
   }
@@ -96,6 +106,11 @@ Glob.prototype._filter = function(filepath) {
 
   // console.log('_filter', filepath, this.pattern, isMatch);
   if (isMatch) {
+    // apply abspath
+    if (this.abspath && !isAbsolute(filepath)) {
+      filepath = path.resolve(this.cwd, filepath);
+    }
+
     this.found.push(filepath);
     this.emit('match', filepath);
   }
@@ -240,8 +255,11 @@ Glob.prototype._doStat = function(filepath, strip, affix, knownToExist, onDone) 
           break;
         default:
           exists = false;
-          console.error(err);
-          console.error(err.stack);
+          if (self.sync) {
+            throw err;
+          } else {
+            self.emit('error', err);
+          }
       }
     } else {
       exists = true;
@@ -271,9 +289,11 @@ Glob.prototype._doStat = function(filepath, strip, affix, knownToExist, onDone) 
             case 'UNKNOWN':
               break;
             default:
-              self.emit('error', err);
-              console.error(err);
-              console.error(err.stack);
+              if (self.sync) {
+                throw err;
+              } else {
+                self.emit('error', err);
+              }
           }
           entries = [];
         }

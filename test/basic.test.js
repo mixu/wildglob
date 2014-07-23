@@ -72,7 +72,7 @@ exports['tests'] = {
     },
 
     'a': function() {
-      var result = glob.sync('**/d', { cwd: path.resolve('a') });
+      var result = glob.sync('**/d', { cwd: path.resolve('a') }).sort();
       console.log(result);
       assert.deepEqual(result,  [ 'b/c/d', 'c/d' ]);
     },
@@ -143,7 +143,6 @@ exports['tests'] = {
       };
     },
 
-    // todo: async is probably better for these
     'error callback - sync': function() {
       var err = false;
       try {

@@ -6,14 +6,15 @@
   "dependencies": {
     "glob-parse": "0.0.1",
     "microee": "0.0.5",
+    "minimatch": "~0.4.0",
     "miniq": "~0.1.2",
     "mm-brace-expand": "0.0.1",
-    "through2": "~0.5.1",
-    "wildmatch": "~0.1.0"
+    "through2": "~0.5.1"
   },
   "devDependencies": {
     "file-fixture": "~0.0.0",
-    "rimraf": "~2.2.8"
+    "rimraf": "~2.2.8",
+    "wildmatch": "~0.1.0"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
