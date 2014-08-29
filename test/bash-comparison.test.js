@@ -2,7 +2,11 @@ var fs = require('fs'),
     path = require('path'),
     assert = require('assert'),
     Fixture = require('file-fixture'),
-    glob = require('../index.js');
+    glob = require('../index.js'),
+    spawn = require('child_process').spawn,
+    exec = require('child_process').exec;
+
+var useBash = true;
 
 exports['tests'] = {
 
@@ -46,6 +50,7 @@ exports['tests'] = {
       }
       done();
     });
+
   }
 
 };
@@ -55,41 +60,86 @@ exports['tests'] = {
 var bashResults = require('./bash-results'),
     globs = Object.keys(bashResults);
 
-globs.forEach(function (pattern) {
-  var expect = bashResults[pattern];
-  var hasSymLink = expect.some(function (m) {
-    return false;
-    return /\/symlink\//.test(m);
-  });
+exec('bash --version', function(err, stdout) {
+  useBash = /version 4/.test(stdout);
 
-  if (hasSymLink ) {
-    return;
-  }
+  // tests do not run on OS X, which has an outdated bash
 
-  exports['tests'][pattern + ' sync'] = function() {
-    var self = this, result;
-    // replace /tmp/glob-test with self.absFixtureDir
-    pattern = pattern.replace('/tmp/glob-test', this.absFixtureDir);
-    expect = cleanResults(
-        expect.map(function(str) {
-            return str.replace('/tmp/glob-test', self.absFixtureDir);
-        }));
-    result = cleanResults(glob.sync(pattern, { cwd: self.relativeFixtureDir }));
+  globs.forEach(function (pattern) {
+    var expect = bashResults[pattern];
+    var hasSymLink = expect.some(function (m) {
+      return false;
+      return /\/symlink\//.test(m);
+    });
 
-    if (expect.length < 20) {
-      console.log('expect', expect);
-      console.log('result', result);
-    } else {
-      expect.forEach(function(value, i) {
-        var resultValue = result[i];
-        if (value != resultValue) {
-          console.log('diff', i, value, resultValue);
-        }
-      });
+    if (hasSymLink ) {
+      return;
+    }
+    if (pattern == 'test/**/a/**/' && !useBash) {
+      return;
     }
 
-    assert.deepEqual(result, expect);
-  };
+    if (pattern === 'test/**/a/**/') {
+      exports['tests']['generate fixture ' + pattern] = function(done) {
+        var cmd, cp;
+        if (useBash) {
+          cmd = "shopt -s globstar && " +
+                "shopt -s extglob && " +
+                "shopt -s nullglob && " +
+                "eval \'for i in " + pattern + "; do echo $i; done\'";
+          cp = spawn("bash", ["-c", cmd], { cwd: this.relativeFixtureDir });
+        } else {
+          cmd = 'echo ' + pattern;
+          cp = spawn('zsh', ['-c', cmd], { cwd: this.relativeFixtureDir });
+        }
+
+        var out = [];
+        cp.stdout.on("data", function (c) {
+          out.push(c);
+        });
+        cp.stderr.pipe(process.stderr);
+        cp.on("close", function (code) {
+          out = flatten(out);
+          if (!out) {
+            out = []
+          } else {
+            out = cleanResults(out.split(/\r*\n/));
+          }
+
+          console.log('bash output', pattern, out);
+          assert.equal(code, 0, 'bash exited with code ' + code + ' when generating fixture ' + pattern);
+          done();
+        });
+      };
+    }
+
+    exports['tests'][pattern + ' sync'] = function() {
+      var self = this, result;
+      // replace /tmp/glob-test with self.absFixtureDir
+      pattern = pattern.replace('/tmp/glob-test', this.absFixtureDir);
+      expect = cleanResults(
+          expect.map(function(str) {
+              return str.replace('/tmp/glob-test', self.absFixtureDir);
+          }));
+      result = cleanResults(glob.sync(pattern, { cwd: self.relativeFixtureDir }));
+
+      if (expect.length < 20) {
+        console.log('expect', expect);
+        console.log('result', result);
+      } else {
+        expect.forEach(function(value, i) {
+          var resultValue = result[i];
+          if (value != resultValue) {
+            console.log('diff', i, value, resultValue);
+          }
+        });
+      }
+
+      assert.deepEqual(result, expect);
+    };
+
+  });
+
 
 });
 
@@ -114,6 +164,18 @@ function cleanResults (m) {
   })
 }
 
+function flatten (chunks) {
+  var s = 0
+  chunks.forEach(function (c) { s += c.length })
+  var out = new Buffer(s)
+  s = 0
+  chunks.forEach(function (c) {
+    c.copy(out, s)
+    s += c.length
+  })
+
+  return out.toString().trim()
+}
 // if this module is the script being run, then run the tests:
 if (module == require.main) {
   var mocha = require('child_process').spawn('mocha', [
