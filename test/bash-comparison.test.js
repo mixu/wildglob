@@ -8,7 +8,7 @@ var fs = require('fs'),
 
 var useBash = true;
 
-exports['tests'] = {
+exports['bash comparison tests'] = {
 
   before: function(done) {
     var self = this;
@@ -42,87 +42,59 @@ exports['tests'] = {
     fs.mkdirSync(path.resolve(this.relativeFixtureDir, './test/a/symlink/a'));
     fs.mkdirSync(path.resolve(this.relativeFixtureDir, './test/a/symlink/a/b'));
 
-    console.log(symlinkFrom, symlinkTo);
+    // console.log(symlinkFrom, symlinkTo);
 
     fs.symlink('../..', symlinkFrom, "dir", function (err) {
       if (err) {
         throw err;
       }
-      done();
+      exec('bash --version', function(err, stdout) {
+        useBash = /version 4/.test(stdout);
+        done();
+      });
     });
 
   }
 
 };
 
+
 // create test cases
 
 var bashResults = require('./bash-results'),
     globs = Object.keys(bashResults);
 
-exec('bash --version', function(err, stdout) {
-  useBash = /version 4/.test(stdout);
 
-  // tests do not run on OS X, which has an outdated bash
+// tests do not run on OS X, which has an outdated bash
 
-  globs.forEach(function (pattern) {
-    var expect = bashResults[pattern];
-    var hasSymLink = expect.some(function (m) {
-      return false;
-      return /\/symlink\//.test(m);
-    });
+globs.forEach(function (pattern) {
+  var expect = bashResults[pattern];
+  var hasSymLink = expect.some(function (m) {
+    return false;
+    return /\/symlink\//.test(m);
+  });
 
-    if (hasSymLink ) {
+  if (hasSymLink) {
+    return;
+  }
+
+  exports['bash comparison tests'][pattern + ' sync'] = function() {
+    if ((pattern == 'test/**/a/**/' || pattern == 'test/a/symlink/a/b/c/a/b/c/a/b/c//a/b/c////a/b/c/**/b/c/**') && !useBash) {
       return;
     }
-    if (pattern == 'test/**/a/**/' && !useBash) {
-      return;
-    }
 
-    if (pattern === 'test/**/a/**/') {
-      exports['tests']['generate fixture ' + pattern] = function(done) {
-        var cmd, cp;
-        if (useBash) {
-          cmd = "shopt -s globstar && " +
-                "shopt -s extglob && " +
-                "shopt -s nullglob && " +
-                "eval \'for i in " + pattern + "; do echo $i; done\'";
-          cp = spawn("bash", ["-c", cmd], { cwd: this.relativeFixtureDir });
-        } else {
-          cmd = 'echo ' + pattern;
-          cp = spawn('zsh', ['-c', cmd], { cwd: this.relativeFixtureDir });
-        }
+    var self = this, result;
+    // replace /tmp/glob-test with self.absFixtureDir
+    pattern = pattern.replace('/tmp/glob-test', this.absFixtureDir);
+    expect = cleanResults(
+        expect.map(function(str) {
+            return str.replace('/tmp/glob-test', self.absFixtureDir);
+        }));
+    result = cleanResults(glob.sync(pattern, { cwd: self.relativeFixtureDir }));
 
-        var out = [];
-        cp.stdout.on("data", function (c) {
-          out.push(c);
-        });
-        cp.stderr.pipe(process.stderr);
-        cp.on("close", function (code) {
-          out = flatten(out);
-          if (!out) {
-            out = []
-          } else {
-            out = cleanResults(out.split(/\r*\n/));
-          }
-
-          console.log('bash output', pattern, out);
-          assert.equal(code, 0, 'bash exited with code ' + code + ' when generating fixture ' + pattern);
-          done();
-        });
-      };
-    }
-
-    exports['tests'][pattern + ' sync'] = function() {
-      var self = this, result;
-      // replace /tmp/glob-test with self.absFixtureDir
-      pattern = pattern.replace('/tmp/glob-test', this.absFixtureDir);
-      expect = cleanResults(
-          expect.map(function(str) {
-              return str.replace('/tmp/glob-test', self.absFixtureDir);
-          }));
-      result = cleanResults(glob.sync(pattern, { cwd: self.relativeFixtureDir }));
-
+    try {
+      assert.deepEqual(result, expect);
+    } catch (e) {
       if (expect.length < 20) {
         console.log('expect', expect);
         console.log('result', result);
@@ -134,14 +106,12 @@ exec('bash --version', function(err, stdout) {
           }
         });
       }
-
-      assert.deepEqual(result, expect);
-    };
-
-  });
-
+      throw e;
+    }
+  };
 
 });
+
 
 function alphasort (a, b) {
   a = a.toLowerCase()

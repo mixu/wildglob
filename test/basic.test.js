@@ -4,7 +4,7 @@ var fs = require('fs'),
     Fixture = require('file-fixture'),
     glob = require('../index.js');
 
-exports['tests'] = {
+exports['basic tests'] = {
 
   before: function() {
     this.fixture = new Fixture();
@@ -40,14 +40,14 @@ exports['tests'] = {
 
     './foo/**/*.js works': function() {
       var result = glob.sync('./foo/**/*.js', { cwd: this.basicFixtureDir }).sort();
-      console.log(result);
+//      console.log(result);
       assert.deepEqual(result, [  './foo/aa.js', './foo/bar/aa.js' ]);
     },
 
     '__dirname + /foo/**/*.js works': function() {
       var self = this,
           result = glob.sync(this.basicFixtureDir + '/foo/**/*.js').sort();
-      console.log(result);
+//      console.log(result);
       assert.deepEqual(result, [ 'foo/aa.js', 'foo/bar/aa.js' ].map(function(str) {
         return self.basicFixtureDir + '/' + str;
       }));
@@ -65,62 +65,62 @@ exports['tests'] = {
       process.chdir(this.origCwd);
     },
 
-    '.': function() {
+    'cwd-test .': function() {
       var result = glob.sync('**/d').sort();
-      console.log(result);
+//      console.log(result);
       assert.deepEqual(result,  [ 'a/b/c/d', 'a/c/d' ]);
     },
 
-    'a': function() {
+    'cwd-test a': function() {
       var result = glob.sync('**/d', { cwd: path.resolve('a') }).sort();
-      console.log(result);
+//      console.log(result);
       assert.deepEqual(result,  [ 'b/c/d', 'c/d' ]);
     },
 
-    'a/b': function() {
+    'cwd-test a/b': function() {
       var result = glob.sync('**/d', { cwd: path.resolve('a/b') });
-      console.log(result);
+//      console.log(result);
       assert.deepEqual(result,  [ 'c/d' ]);
     },
 
-    'a/b/': function() {
+    'cwd-test a/b/': function() {
       var result = glob.sync('**/d', { cwd: path.resolve('a/b/') });
-      console.log(result);
+//      console.log(result);
       assert.deepEqual(result,  [ 'c/d' ]);
     },
 
-    'process.cwd': function() {
+    'cwd-test process.cwd': function() {
       var result = glob.sync('**/d', { cwd: process.cwd() }).sort();
-      console.log(result);
+//      console.log(result);
       assert.deepEqual(result,  [ 'a/b/c/d', 'a/c/d' ]);
     }
   },
 
   'empty-set.js - Patterns that cannot match anything': {
-    '# comment': function() {
+    'empty-set "# comment"': function() {
       var result = glob.sync('# comment').sort();
-      console.log(result);
+//      console.log(result);
       // no error thrown
       assert.deepEqual(result, []);
     },
 
-    ' ': function() {
+    'empty-set " "': function() {
       var result = glob.sync(' ').sort();
-      console.log(result);
+//      console.log(result);
       // no error thrown
       assert.deepEqual(result, []);
     },
 
-    '\n': function() {
+    'empty-set "\\n"': function() {
       var result = glob.sync('\n').sort();
-      console.log(result);
+//      console.log(result);
       // no error thrown
       assert.deepEqual(result, []);
     },
 
-    'just doesnt happen to match anything so this is a control': function() {
+    'empty-set "just doesnt happen to match anything so this is a control"': function() {
       var result = glob.sync('just doesnt happen to match anything so this is a control').sort();
-      console.log(result);
+//      console.log(result);
       // no error thrown
       assert.deepEqual(result, []);
     }

@@ -3,7 +3,7 @@ var fs = require('fs'),
     Fixture = require('file-fixture'),
     glob = require('../index.js');
 
-exports['tests'] = {
+exports['API tests'] = {
 
   before: function() {
     this.fixture = new Fixture();

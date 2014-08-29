@@ -99,7 +99,7 @@ When the directory traversal starts, each include glob has been expanded so that
 
 An optimal implementation should use a minimum amount of CPU time and also avoid recursing into directories which will never produce matches. The latter part relies on the fixed portions of the glob expression having appropriate matches, which has diminishing returns once the prefix has been processed. Exclusions which will only exclude files will probably only have small returns, while excluding large folders early on can have a larger impact.
 
-Here are a couple of ideas for
+Here are a couple of ideas:
 
 - adding set expansion support (only improves performance for globs with sets)
 - adding expansion support for extglob contents (only improves performance for globs with extglob expressions)

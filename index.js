@@ -176,7 +176,7 @@ Glob.prototype._tasks = function(pattern) {
 
   var basenames = this._basenames(pattern);
 
-  console.log(basenames);
+  // console.log(basenames);
 
   return basenames.map(function(prefix) {
     return function(done) {
@@ -214,7 +214,7 @@ Glob.prototype._tasks = function(pattern) {
       }
       // now read the directory and all subdirectories:
       // if wildmatch supported partial matches we could prune the tree much earlier
-      console.log('dostat', prefix, 'read', read, 'remove', strip, affix);
+      // console.log('dostat', prefix, 'read', read, 'remove', strip, affix);
 
       self._doStat(read, strip, affix, false, done);
     };
@@ -280,7 +280,7 @@ Glob.prototype._doStat = function(filepath, strip, affix, knownToExist, onDone) 
       var basepath = (filepath[filepath.length - 1] !== path.sep ? filepath + path.sep : filepath);
       self._readdir(basepath, function(err, entries) {
         if (err) {
-          console.log(err);
+          // console.log(err);
           switch(err.code) {
             case 'ENOTDIR':
             case 'ENOENT':
