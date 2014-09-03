@@ -88,6 +88,13 @@ exports['API tests'] = {
 //    var files = glob.sync('/foo/bar', { root: });
 //
 //  },
+//  'can remove duplicates': function() {
+//
+//  },
+//  'can remove duplicates taking abspath into account': function() {
+//
+//  },
+
 };
 
 // if this module is the script being run, then run the tests:

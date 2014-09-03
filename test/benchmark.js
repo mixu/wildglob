@@ -20,6 +20,7 @@ function runBash(cmd, opts, onDone) {
 exports['tests'] = {
 
   before: function(done) {
+    var self = this;
     this.timeout(600 * 1000);
     this.fixture = new Fixture();
 
@@ -35,9 +36,12 @@ exports['tests'] = {
     this.target = this.fixture.dir(spec, {});
     console.log('Created folders in', this.target);
     console.log('Installing npm modules');
-    runBash('npm install glob wildglob wildmatch globy', { cwd: this.target }, function() {
-      console.log('Installed glob wildglob wildmatch globy.');
-      done();
+    runBash('npm install glob wildmatch globy', { cwd: this.target }, function() {
+      console.log('Installed glob wildmatch globy.');
+      runBash('npm link wildglob', { cwd: self.target }, function() {
+        console.log('npm link wildglob done.');
+        done();
+      });
     });
   },
 
@@ -129,7 +133,7 @@ exports['tests'] = {
   'wildglob.sync timing (NOP)': function(done) {
     this.timeout(600 * 1000);
     console.log();
-    console.log('wildglob.sync (NP{) timing:');
+    console.log('wildglob.sync (NOP) timing:');
     runBash('time node -e \'' +
     [ 'var glob=require("wildglob");',
       'console.log(glob.sync("**/*.txt", { ',
@@ -139,6 +143,19 @@ exports['tests'] = {
       '}).length);'
     ].join('\n') + '\'', { cwd: this.target }, done);
   },
+
+  'wildglob.async timing (minimatch)': function(done) {
+    this.timeout(600 * 1000);
+    console.log();
+    console.log('wildglob.async timing (minimatch):');
+    runBash('time node -e \'' +
+    [ 'var glob=require("wildglob");',
+      'glob("**/*.txt", function (er, files) {',
+      '  console.log(files.length)',
+      '});'
+    ].join('\n') + '\'', { cwd: this.target }, done);
+  },
+
 
   'glob.async timing': function(done) {
     this.timeout(600 * 1000);
@@ -151,14 +168,6 @@ exports['tests'] = {
       '});'
     ].join('\n') + '\'', { cwd: this.target }, done);
   },
-
-  // wildglob - NO-OP resolver
-
-  // wildglob - minimatch
-
-  // wildglob - wildmatch
-
-  // wildglob - globy
 
   // wildglob - glob.js
 };

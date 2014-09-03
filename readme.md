@@ -40,12 +40,12 @@ The following numbers are from a VM running on a Macbook Pro:
     <td>5.532s</td>
   </tr>
   <tr>
-    <td>isaacs/node-glob sync</td>
-    <td>13.418s</td>
-  </tr>
-  <tr>
     <td>wildglob async (minimatch)</td>
     <td>12.287s</td>
+  </tr>
+  <tr>
+    <td>isaacs/node-glob sync</td>
+    <td>13.418s</td>
   </tr>
   <tr>
     <td>isaacs/node-glob async</td>
@@ -95,12 +95,22 @@ However, stat'ing the whole file system is obviously inefficient, since we can u
 
 When the directory traversal starts, each include glob has been expanded so that only "tricky" parts remains. Matching a `?`, `*`, a globstar or a extglob is rather tricky - typically, glob implementations use backtracking to deal with wildcard expressions such as these expressions. This results in a fairly high branching factor particularly for globstars.
 
-### Further preformance improvements
+### Further performance improvements
 
 An optimal implementation should use a minimum amount of CPU time and also avoid recursing into directories which will never produce matches. The latter part relies on the fixed portions of the glob expression having appropriate matches, which has diminishing returns once the prefix has been processed. Exclusions which will only exclude files will probably only have small returns, while excluding large folders early on can have a larger impact.
 
 Here are a couple of ideas:
 
+- rel-to-absglob: convert a relative glob into an absolute glob expression (mainly avoids the hassles with converting back and forth on mixed glob expressions as abspaths are what the fs API uses)
+- also makes exclude prefix matching easy
+- globstack:
+  - include, exclude, include, exclude =>
+    - Include mode:
+      - ieie
+      - ie
+    - Exclude prefix mode:
+      - eie
+      - e
 - adding set expansion support (only improves performance for globs with sets)
 - adding expansion support for extglob contents (only improves performance for globs with extglob expressions)
 - performing full matching before traversing into a subdirectory ([matched](https://github.com/jonschlinkert/matched) has a nice description of why you would want to do this)
