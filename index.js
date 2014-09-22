@@ -1,11 +1,12 @@
-var fs = require('fs'),
-    path = require('path'),
+var path = require('path'),
     minimatch = require('minimatch'),
     microee = require('microee'),
     parse = require('glob-parse'),
     expand = require('mm-brace-expand'),
     parallel = require('miniq'),
-    through2 = require('through2');
+    through2 = require('through2'),
+    traverse = require('./lib/traverse'),
+    libfs = require('./lib/fs');
 
 function nop() {}
 function runTaskImmediately(task) { task(nop); }
@@ -62,10 +63,9 @@ function Glob(pattern, opts, onDone) {
     this.root = this.root.replace(/\\/g, '/');
   }
 
-  this.fs = opts.fs || fs;
   // Setting parallellism to infinity really helps in clearing out the async queue
   this.queue = parallel(Infinity);
-  // Never need to break the queue, as all tasks are truely async
+  // Never need to break the queue, as all tasks are truly async
   this.queue.maxStack = Infinity;
   this.found = [];
   this.pattern = pattern;
@@ -93,6 +93,36 @@ function Glob(pattern, opts, onDone) {
       calledDone = true;
       onDone(null, self.found);
     });
+  }
+
+  // attach traverse function
+  if (this.sync) {
+    opts.fs = libfs.sync(opts.fs || require('fs'));
+
+    // filepath, strip, affix, knownToExist, stat, readdir, exec, onError, onDone
+    this._doStat = function(filepath, strip, affix, knownToExist, onDone) {
+      return traverse(filepath, strip, affix, knownToExist,
+        opts.fs.stat,
+        opts.fs.readdir,
+        runTaskImmediately,
+        self._doStat,
+        self._filter.bind(self),
+        function (err) { throw err; },
+        onDone);
+    };
+  } else {
+     opts.fs = libfs.async(opts.fs || require('fs'));
+    this._doStat =
+    function(filepath, strip, affix, knownToExist, onDone) {
+      return traverse(filepath, strip, affix, knownToExist,
+        opts.fs.stat,
+        opts.fs.readdir,
+        self.queue.exec.bind(self.queue),
+        self._doStat,
+        self._filter.bind(self),
+        function(err) { console.log(err); self.emit('error', err); } , // self.emit.bind(self, 'error'),
+        onDone);
+    };
   }
 }
 
@@ -122,6 +152,10 @@ Glob.prototype._basenames = function(glob) {
   var result;
 
   function getPrefix(glob) {
+    if (!glob) {
+      return [];
+    }
+
     var parsed = parse(glob, { full: true }),
         result,
         prefix = '',
@@ -219,129 +253,6 @@ Glob.prototype._tasks = function(pattern) {
       self._doStat(read, strip, affix, false, done);
     };
   });
-};
-
-Glob.prototype._doStat = function(filepath, strip, affix, knownToExist, onDone) {
-  var self = this,
-      exec = (self.sync ? runTaskImmediately : self.queue.exec.bind(self.queue));
-
-  function absToRel(str) {
-    if (strip.length === 0) {
-      return str;
-    }
-
-    return (str.substr(0, strip.length) == strip ? str.substr(strip.length + 1) : str);
-  }
-
-  // the order between stat and filter does not matter, because we'll need to stat each
-  // entry anyway to know if it's a dir, even if it fails the filter check (since the full path
-  // can still match even if the current partial does not)
-  // if we had accurate partial matching then yes, then filter before stat is slightly better.
-  this._stat(filepath, function(err, stat) {
-    var exists,
-        isDir = false;
-    if (err) {
-      switch(err.code) {
-        case 'ELOOP':
-          // like Minimatch, ignore ELOOP for purposes of existence check but not
-          // for the actual stat()ing
-          exists = knownToExist;
-          break;
-        case 'ENOENT':
-          // ignore ENOENT (per Node core docs, "fs.exists() is an anachronism
-          // and exists only for historical reasons. In particular, checking if a file
-          // exists before opening it is an anti-pattern")
-          exists = false;
-          break;
-        default:
-          exists = false;
-          if (self.sync) {
-            throw err;
-          } else {
-            self.emit('error', err);
-          }
-      }
-    } else {
-      exists = true;
-      isDir = stat.isDirectory();
-    }
-
-    // console.log('resolve', filepath, exists, isDir);
-    // this where partial matches against a pending traversal would help by pruning the tree
-    if (isDir) {
-      // try without a trailing slash
-      if (!self._filter(affix + absToRel(filepath))) {
-        // needed so that wildmatch treats dirs correctly (in some cases)
-        if (filepath.charAt(filepath.length - 1) != '/') {
-          self._filter(affix + absToRel(filepath + '/'));
-        }
-      }
-      // if the input is a directory, readdir and process all entries in it
-      var basepath = (filepath[filepath.length - 1] !== path.sep ? filepath + path.sep : filepath);
-      self._readdir(basepath, function(err, entries) {
-        if (err) {
-          // console.log(err);
-          switch(err.code) {
-            case 'ENOTDIR':
-            case 'ENOENT':
-            case 'ELOOP':
-            case 'ENAMETOOLONG':
-            case 'UNKNOWN':
-              break;
-            default:
-              if (self.sync) {
-                throw err;
-              } else {
-                self.emit('error', err);
-              }
-          }
-          entries = [];
-        }
-        entries.forEach(function(f) {
-          if (f.charAt(0) === '.') {
-            return;
-          }
-          // queue a stat operation
-          exec(function(done) { self._doStat(basepath + f, strip, affix, true, done); });
-        });
-        // tasks have been queued so this entry is done
-        onDone();
-      });
-    } else if (exists) {
-      self._filter(affix + absToRel(filepath));
-      // no readdir, so the stat for this entry is done
-      onDone();
-    }
-  });
-};
-
-Glob.prototype._stat = function(p, onDone) {
-  var stat, err;
-  if (this.sync) {
-    try {
-      stat = this.fs.statSync(p);
-    } catch (e) {
-      err = e;
-    }
-    onDone(err, stat);
-  } else {
-    this.fs.stat(p, onDone);
-  }
-};
-
-Glob.prototype._readdir = function(p, onDone) {
-  var self = this, entries, err;
-
-  if (this.sync) {
-    try {
-      entries = this.fs.readdirSync(p);
-    } catch (e) {
-      err = e;
-    }
-    onDone(err, entries);
-  } else {
-    this.fs.readdir(p, onDone);
-  }
 };
 
 var isAbsolute = process.platform === "win32" ? absWin : absUnix;

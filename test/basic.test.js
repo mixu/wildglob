@@ -32,6 +32,32 @@ exports['basic tests'] = {
 */
   },
 
+  'passing in a empty value': {
+
+    'sync': function() {
+      var result = glob.sync();
+      assert.deepEqual(result, []);
+    },
+
+    'async': function(done) {
+      var result = glob(undefined, function(err, result) {
+        assert.deepEqual(result, []);
+        done();
+      });
+    },
+
+    'stream': function(done) {
+      var result = [];
+      glob.stream()
+          .on('error', function(err) { throw err; })
+          .on('data', function(filepath) { result.push(filepath); })
+          .once('end', function() {
+            assert.deepEqual(result, []);
+            done();
+          });
+    }
+  },
+
   'basic sync': {
     'foo/**/*.js works': function() {
       var result = glob.sync('foo/**/*.js', { cwd: this.basicFixtureDir }).sort();
@@ -146,7 +172,7 @@ exports['basic tests'] = {
     'error callback - sync': function() {
       var err = false;
       try {
-        glob.sync('*');
+        glob.sync('*', { fs: fs });
       } catch (e) {
         // expecting an error
         err = e;
@@ -155,7 +181,7 @@ exports['basic tests'] = {
     },
 
     'error callback - async': function(done) {
-      glob('*', function(err) {
+      glob('*', { fs: fs }, function(err) {
         assert.ok(err);
         done();
       });
