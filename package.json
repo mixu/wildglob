@@ -2,7 +2,11 @@
   "name": "wildglob",
   "version": "0.0.1",
   "description": "readme.md",
-  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mixu/wildglob.git"
+  },
+ "main": "index.js",
   "dependencies": {
     "glob-parse": "0.0.1",
     "microee": "0.0.5",
