@@ -1,6 +1,6 @@
 {
   "name": "wildglob",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "readme.md",
   "main": "index.js",
   "dependencies": {
