@@ -1,20 +1,33 @@
 var fs = require('fs'),
     assert = require('assert'),
-    g2b = require('../lib2/glob-to-basenames');
+    pi = require('pipe-iterators'),
+    globToBasenames = require('../lib2/glob-to-basenames'),
+    basenameToDirectory = require('../lib2/basename-to-directory');
 
-describe('glob to basenames test', function() {
+describe('basename to directory test', function() {
 
+  function run(input, done) {
+    pi.fromArray(input)
+      .pipe(globToBasenames())
+      .pipe(basenameToDirectory({
+        cwd: '/cwd',
+        root: '/'
+      }))
+      .pipe(pi.toArray(function(results) {
+        done(results.length === 1 ? results[0] : results);
+      }));
+  }
 
-function run() {
-      basenameToDirectory({
-        cwd: cwd,
-        root: root
-      })
-
-}
-
-  it('works', function() {
-    assert.equals(run('/tmp/foo/**'), '/tmp/foo');
+  it('works', function(done) {
+    run('/tmp/foo/**', function(actual) {
+     assert.deepEqual(actual, {
+        path: '/tmp/foo/',
+        strip: '',
+        affix: '',
+        knownToExist:false
+      });
+      done();
+    });
   });
 
 });
