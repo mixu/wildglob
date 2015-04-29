@@ -22,7 +22,7 @@ exports['basic tests'] = {
       'a/b/c/d': 'i like tests',
       'a/bc/e/f': 'i like tests',
       'a/c/d/c/b': 'i like tests',
-      'a/cb/e/f': 'i like tests',
+      'a/cb/e/f': 'i like tests'
     }, {});
 /*
     this.absFixtureDir = this.fixture.dirname();
@@ -61,20 +61,20 @@ exports['basic tests'] = {
   'basic sync': {
     'foo/**/*.js works': function() {
       var result = glob.sync('foo/**/*.js', { cwd: this.basicFixtureDir }).sort();
-      assert.deepEqual(result, [ 'foo/aa.js', 'foo/bar/aa.js' ]);
+      assert.deepEqual(result, ['foo/aa.js', 'foo/bar/aa.js']);
     },
 
     './foo/**/*.js works': function() {
       var result = glob.sync('./foo/**/*.js', { cwd: this.basicFixtureDir }).sort();
 //      console.log(result);
-      assert.deepEqual(result, [  './foo/aa.js', './foo/bar/aa.js' ]);
+      assert.deepEqual(result, ['./foo/aa.js', './foo/bar/aa.js']);
     },
 
     '__dirname + /foo/**/*.js works': function() {
       var self = this,
           result = glob.sync(this.basicFixtureDir + '/foo/**/*.js').sort();
 //      console.log(result);
-      assert.deepEqual(result, [ 'foo/aa.js', 'foo/bar/aa.js' ].map(function(str) {
+      assert.deepEqual(result, ['foo/aa.js', 'foo/bar/aa.js'].map(function(str) {
         return self.basicFixtureDir + '/' + str;
       }));
     }
@@ -94,31 +94,31 @@ exports['basic tests'] = {
     'cwd-test .': function() {
       var result = glob.sync('**/d').sort();
 //      console.log(result);
-      assert.deepEqual(result,  [ 'a/b/c/d', 'a/c/d' ]);
+      assert.deepEqual(result, ['a/b/c/d', 'a/c/d']);
     },
 
     'cwd-test a': function() {
       var result = glob.sync('**/d', { cwd: path.resolve('a') }).sort();
 //      console.log(result);
-      assert.deepEqual(result,  [ 'b/c/d', 'c/d' ]);
+      assert.deepEqual(result, ['b/c/d', 'c/d']);
     },
 
     'cwd-test a/b': function() {
       var result = glob.sync('**/d', { cwd: path.resolve('a/b') });
 //      console.log(result);
-      assert.deepEqual(result,  [ 'c/d' ]);
+      assert.deepEqual(result, ['c/d']);
     },
 
     'cwd-test a/b/': function() {
       var result = glob.sync('**/d', { cwd: path.resolve('a/b/') });
 //      console.log(result);
-      assert.deepEqual(result,  [ 'c/d' ]);
+      assert.deepEqual(result, ['c/d']);
     },
 
     'cwd-test process.cwd': function() {
       var result = glob.sync('**/d', { cwd: process.cwd() }).sort();
 //      console.log(result);
-      assert.deepEqual(result,  [ 'a/b/c/d', 'a/c/d' ]);
+      assert.deepEqual(result, ['a/b/c/d', 'a/c/d']);
     }
   },
 
@@ -199,7 +199,7 @@ if (module == require.main) {
   var mocha = require('child_process').spawn('mocha', [
     '--colors', '--bail', '--ui', 'exports', '--reporter', 'spec', __filename
   ]);
-  mocha.stderr.on('data', function (data) {
+  mocha.stderr.on('data', function(data) {
     if (/^execvp\(\)/.test(data)) {
      console.log('Failed to start child process. You need mocha: `npm install -g mocha`');
     }

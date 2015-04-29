@@ -6,16 +6,16 @@
   // which is described here: https://github.com/isaacs/node-glob/issues/64
   // might not even be an issue with the less clever approach taken here
 }
-*/
 
 'new-glob-optional-options.js': {
 
   'new glob, with cb, and no options': function() {
     var result = glob(__filename).sort();
     console.log(result);
-    assert.deepEqual(result, [ __filename ]);
+    assert.deepEqual(result, [__filename]);
   }
 },
+*/
 
 // other cases:
 // - mark.js: will probably not support { mark: true }

@@ -29,7 +29,7 @@ exports['bash comparison tests'] = {
     }, {});
 
     this.absFixtureDir = this.fixture.dirname({});
-    [ 'foo', 'bar', 'baz', 'asdf', 'quux', 'qwer', 'rewq'].forEach(function (w) {
+    ['foo', 'bar', 'baz', 'asdf', 'quux', 'qwer', 'rewq'].forEach(function(w) {
       fs.mkdirSync(self.absFixtureDir + '/' + w);
     });
 
@@ -44,7 +44,7 @@ exports['bash comparison tests'] = {
 
     // console.log(symlinkFrom, symlinkTo);
 
-    fs.symlink('../..', symlinkFrom, "dir", function (err) {
+    fs.symlink('../..', symlinkFrom, 'dir', function(err) {
       if (err) {
         throw err;
       }
@@ -67,11 +67,11 @@ var bashResults = require('./bash-results'),
 
 // tests do not run on OS X, which has an outdated bash
 
-globs.forEach(function (pattern) {
+globs.forEach(function(pattern) {
   var expect = bashResults[pattern];
-  var hasSymLink = expect.some(function (m) {
+  var hasSymLink = expect.some(function(m) {
     return false;
-    return /\/symlink\//.test(m);
+    // return /\/symlink\//.test(m);
   });
 
   if (hasSymLink) {
@@ -79,7 +79,9 @@ globs.forEach(function (pattern) {
   }
 
   exports['bash comparison tests'][pattern + ' sync'] = function() {
-    if ((pattern == 'test/**/a/**/' || pattern == 'test/a/symlink/a/b/c/a/b/c/a/b/c//a/b/c////a/b/c/**/b/c/**') && !useBash) {
+    if ((pattern == 'test/**/a/**/' ||
+         pattern == 'test/a/symlink/a/b/c/a/b/c/a/b/c//a/b/c////a/b/c/**/b/c/**') &&
+         !useBash) {
       return;
     }
 
@@ -113,45 +115,45 @@ globs.forEach(function (pattern) {
 });
 
 
-function alphasort (a, b) {
-  a = a.toLowerCase()
-  b = b.toLowerCase()
-  return a > b ? 1 : a < b ? -1 : 0
+function alphasort(a, b) {
+  a = a.toLowerCase();
+  b = b.toLowerCase();
+  return a > b ? 1 : a < b ? -1 : 0;
 }
 
-function cleanResults (m) {
+function cleanResults(m) {
   // normalize discrepancies in ordering, duplication,
   // and ending slashes.
-  return m.map(function (m) {
-    return m.replace(/\/+/g, "/").replace(/\/$/, "")
-  }).sort(alphasort).reduce(function (set, f) {
-    if (f !== set[set.length - 1]) set.push(f)
-    return set
-  }, []).sort(alphasort).map(function (f) {
+  return m.map(function(m) {
+    return m.replace(/\/+/g, '/').replace(/\/$/, '');
+  }).sort(alphasort).reduce(function(set, f) {
+    if (f !== set[set.length - 1]) set.push(f);
+    return set;
+  }, []).sort(alphasort).map(function(f) {
     // de-windows
-    return (process.platform !== 'win32') ? f
-           : f.replace(/^[a-zA-Z]:[\/\\]+/, '/').replace(/[\\\/]+/g, '/')
-  })
+    return (process.platform !== 'win32') ? f :
+    f.replace(/^[a-zA-Z]:[\/\\]+/, '/').replace(/[\\\/]+/g, '/');
+  });
 }
 
-function flatten (chunks) {
-  var s = 0
-  chunks.forEach(function (c) { s += c.length })
-  var out = new Buffer(s)
-  s = 0
-  chunks.forEach(function (c) {
-    c.copy(out, s)
-    s += c.length
-  })
+function flatten(chunks) {
+  var s = 0;
+  chunks.forEach(function(c) { s += c.length; });
+  var out = new Buffer(s);
+  s = 0;
+  chunks.forEach(function(c) {
+    c.copy(out, s);
+    s += c.length;
+  });
 
-  return out.toString().trim()
+  return out.toString().trim();
 }
 // if this module is the script being run, then run the tests:
 if (module == require.main) {
   var mocha = require('child_process').spawn('mocha', [
     '--colors', '--bail', '--ui', 'exports', '--reporter', 'spec', __filename
   ]);
-  mocha.stderr.on('data', function (data) {
+  mocha.stderr.on('data', function(data) {
     if (/^execvp\(\)/.test(data)) {
      console.log('Failed to start child process. You need mocha: `npm install -g mocha`');
     }

@@ -17,7 +17,7 @@ function runBash(cmd, opts, onDone) {
   });
 }
 
-exports['tests'] = {
+exports.tests = {
 
   before: function(done) {
     var self = this;
@@ -64,7 +64,7 @@ exports['tests'] = {
     console.log();
     console.log('statSync and readdirSync timing:');
     runBash('time node -e \'' +
-    [ 'var fs=require("fs");',
+    ['var fs=require("fs");',
       'var count = 0;',
       'function walk (path) {',
       '  if (path.slice(-4) === ".txt") count++;',
@@ -85,7 +85,7 @@ exports['tests'] = {
     console.log();
     console.log('glob.sync timing:');
     runBash('time node -e \'' +
-    [ 'var glob=require("glob");',
+    ['var glob=require("glob");',
       'console.log(glob.sync("**/*.txt").length);'
     ].join('\n') + '\'', { cwd: this.target }, done);
   },
@@ -95,7 +95,7 @@ exports['tests'] = {
     console.log();
     console.log('wildglob.sync (minimatch) timing:');
     runBash('time node -e \'' +
-    [ 'var glob=require("wildglob");',
+    ['var glob=require("wildglob");',
       'console.log(glob.sync("**/*.txt").length);'
     ].join('\n') + '\'', { cwd: this.target }, done);
   },
@@ -105,7 +105,7 @@ exports['tests'] = {
     console.log();
     console.log('wildglob.sync (wildmatch) timing:');
     runBash('time node -e \'' +
-    [ 'var glob=require("wildglob"),',
+    ['var glob=require("wildglob"),',
       '    wildmatch = require("wildmatch");',
       'console.log(glob.sync("**/*.txt", { ',
       '   match: function(filepath, pattern) { ',
@@ -120,7 +120,7 @@ exports['tests'] = {
     console.log();
     console.log('wildglob.sync (globy) timing:');
     runBash('time node -e \'' +
-    [ 'var glob=require("wildglob"),',
+    ['var glob=require("wildglob"),',
       '    globy = require("globy");',
       'console.log(glob.sync("**/*.txt", { ',
       '   match: function(filepath, pattern) { ',
@@ -135,7 +135,7 @@ exports['tests'] = {
     console.log();
     console.log('wildglob.sync (NOP) timing:');
     runBash('time node -e \'' +
-    [ 'var glob=require("wildglob");',
+    ['var glob=require("wildglob");',
       'console.log(glob.sync("**/*.txt", { ',
       '   match: function(filepath, pattern) { ',
       '     return true;',
@@ -149,7 +149,7 @@ exports['tests'] = {
     console.log();
     console.log('wildglob.async timing (minimatch):');
     runBash('time node -e \'' +
-    [ 'var glob=require("wildglob");',
+    ['var glob=require("wildglob");',
       'glob("**/*.txt", function (er, files) {',
       '  console.log(files.length)',
       '});'
@@ -162,12 +162,12 @@ exports['tests'] = {
     console.log();
     console.log('Node glob.async timing:');
     runBash('time node -e \'' +
-    [ 'var glob=require("glob");',
+    ['var glob=require("glob");',
       'glob("**/*.txt", function (er, files) {',
       '  console.log(files.length)',
       '});'
     ].join('\n') + '\'', { cwd: this.target }, done);
-  },
+  }
 
   // wildglob - glob.js
 };
@@ -178,7 +178,7 @@ if (module == require.main) {
   var mocha = require('child_process').spawn('mocha', [
     '--colors', '--bail', '--ui', 'exports', '--reporter', 'spec', __filename
   ]);
-  mocha.stderr.on('data', function (data) {
+  mocha.stderr.on('data', function(data) {
     if (/^execvp\(\)/.test(data)) {
      console.log('Failed to start child process. You need mocha: `npm install -g mocha`');
     }

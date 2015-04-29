@@ -18,7 +18,7 @@ function glob(pattern, opts, onDone) {
   // run asynchronously
   g.queue.exec(g._tasks(pattern));
   return g;
-};
+}
 
 glob.sync = function(pattern, opts) {
   opts = opts || {};
@@ -107,7 +107,7 @@ function Glob(pattern, opts, onDone) {
         runTaskImmediately,
         self._doStat,
         self._filter.bind(self),
-        function (err) { throw err; },
+        function(err) { throw err; },
         onDone);
     };
   } else {
@@ -182,7 +182,7 @@ Glob.prototype._basenames = function(glob) {
       }));
     } else {
       // plain str
-      result = [ prefix ];
+      result = [prefix];
     }
 
     return result;
@@ -232,7 +232,7 @@ Glob.prototype._tasks = function(pattern) {
         // 2) the prefix is a path (cannot be empty)
         if (isAbsolute(prefix)) {
           // 2a) exprs with absolute paths are mounted at this.root and have no prefix to remove
-          read = process.platform === "win32" ? prefix : path.join(self.root, prefix);
+          read = process.platform === 'win32' ? prefix : path.join(self.root, prefix);
         } else {
           // 2b) exprs with relative paths are resolved against this.cwd
           // but have cwd removed when matching
@@ -255,9 +255,9 @@ Glob.prototype._tasks = function(pattern) {
   });
 };
 
-var isAbsolute = process.platform === "win32" ? absWin : absUnix;
+var isAbsolute = process.platform === 'win32' ? absWin : absUnix;
 
-function absWin (p) {
+function absWin(p) {
   if (absUnix(p)) { return true; }
   // pull off the device/UNC bit from a windows path.
   // from node's lib/path.js
@@ -267,9 +267,9 @@ function absWin (p) {
       isUnc = device && device.charAt(1) !== ':',
       isAbsolute = !!result[2] || isUnc; // UNC paths are always absolute
 
-  return isAbsolute
+  return isAbsolute;
 }
 
-function absUnix (p) {
-  return (p.charAt(0) === "/" || p === "");
+function absUnix(p) {
+  return (p.charAt(0) === '/' || p === '');
 }

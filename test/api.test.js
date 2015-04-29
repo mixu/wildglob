@@ -29,14 +29,14 @@ exports['API tests'] = {
     'glob.async works': function(done) {
       glob('**/ba*.js', function(err, files) {
         assert.ok(!err);
-        assert.deepEqual(files.sort(), ['vendor/js/bar.js', 'vendor/js/baz.js'] );
+        assert.deepEqual(files.sort(), ['vendor/js/bar.js', 'vendor/js/baz.js']);
         done();
       });
     },
 
     'glob.sync works': function() {
       var files = glob.sync('**/ba*.js');
-      assert.deepEqual(files.sort(), ['vendor/js/bar.js', 'vendor/js/baz.js'] );
+      assert.deepEqual(files.sort(), ['vendor/js/bar.js', 'vendor/js/baz.js']);
     },
 
     'glob.stream works': function(done) {
@@ -45,13 +45,13 @@ exports['API tests'] = {
           .on('error', function(err) { throw err; })
           .on('data', function(filepath) { files.push(filepath); })
           .once('end', function() {
-            assert.deepEqual(files.sort(), ['vendor/js/bar.js', 'vendor/js/baz.js'] );
+            assert.deepEqual(files.sort(), ['vendor/js/bar.js', 'vendor/js/baz.js']);
             done();
           });
     }
   },
 
-  'can change the glob matcher':  function() {
+  'can change the glob matcher': function() {
     var calls = [];
     var files = glob.sync('*', {
       cwd: this.fixDir,
@@ -73,11 +73,11 @@ exports['API tests'] = {
         files = glob.sync('./**/*.*', { abspath: true, cwd: this.fixDir });
 
     assert.deepEqual(files.sort(),
-      [ 'vendor/js/bar.js', 'vendor/js/baz.js', 'vendor/js/foo.js'].map(function(p) {
+      ['vendor/js/bar.js', 'vendor/js/baz.js', 'vendor/js/foo.js'].map(function(p) {
         return self.fixDir + '/' + p;
       })
     );
-  },
+  }
 
 //  'can add negated patterns, values matching negated patterns are excluded': function() {
 //    var files = glob.sync(['**/*.js', '!**/*z.js']);
@@ -102,7 +102,7 @@ if (module == require.main) {
   var mocha = require('child_process').spawn('mocha', [
     '--colors', '--bail', '--ui', 'exports', '--reporter', 'spec', __filename
   ]);
-  mocha.stderr.on('data', function (data) {
+  mocha.stderr.on('data', function(data) {
     if (/^execvp\(\)/.test(data)) {
      console.log('Failed to start child process. You need mocha: `npm install -g mocha`');
     }
