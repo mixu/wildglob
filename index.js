@@ -232,7 +232,7 @@ Glob.prototype._tasks = function(pattern) {
         // 2) the prefix is a path (cannot be empty)
         if (isAbsolute(prefix)) {
           // 2a) exprs with absolute paths are mounted at this.root and have no prefix to remove
-          read = path.join(self.root, prefix);
+          read = process.platform === "win32" ? prefix : path.join(self.root, prefix);
         } else {
           // 2b) exprs with relative paths are resolved against this.cwd
           // but have cwd removed when matching
